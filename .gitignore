@@ -1,5 +1,5 @@
 # Binaries
-gosnag
+/gosnag
 *.exe
 *.dll
 *.so
