@@ -171,7 +171,7 @@ export default function IssueList() {
       setWarningCounts(counts.warnings)
       setInfoCounts(counts.info)
     })
-  }, [projectId, loading])
+  }, [projectId, loading, refreshKey])
 
   const setFilter = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams)
