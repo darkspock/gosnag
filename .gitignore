@@ -1,0 +1,30 @@
+# Binaries
+gosnag
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend build
+web/dist/
+web/node_modules/
+
+# Claude Code (local config, may contain infra secrets)
+.claude/

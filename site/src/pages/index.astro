@@ -1,0 +1,1263 @@
+---
+const stats = [
+  { value: '4.4 MB', label: 'RAM usage', detail: 'Go binary at idle' },
+  { value: '~12 MB', label: 'Docker image', detail: 'Alpine-based' },
+  { value: '1', label: 'Binary', detail: 'Frontend embedded' },
+  { value: '$0', label: 'License cost', detail: 'MIT open source' },
+]
+
+const features = [
+  {
+    icon: '{}',
+    title: 'Sentry SDK Compatible',
+    description: 'Drop-in replacement for Sentry. Use the official SDKs — PHP, JavaScript, Python, Go, Ruby — just point the DSN at your GoSnag instance.',
+  },
+  {
+    icon: '!',
+    title: 'Smart Alerting',
+    description: 'Email and Slack alerts with per-alert level filters and regex title matching. Get notified about what matters, silence the noise.',
+  },
+  {
+    icon: '#',
+    title: 'Issue Triage',
+    description: 'Resolve, snooze (by time or event count), ignore, assign. Cooldown periods prevent resolved issues from immediately reopening.',
+  },
+  {
+    icon: '>_',
+    title: 'Three-Tier Classification',
+    description: 'Errors, Warnings, and Info — each with independent counts, filters, and collapsible sidebar sections. Info-level issues skip the resolve/ignore workflow.',
+  },
+  {
+    icon: '&',
+    title: 'Google SSO',
+    description: 'Google Identity Services authentication out of the box. Role-based access: admin and viewer roles with invite-based onboarding.',
+  },
+  {
+    icon: '~',
+    title: 'Single Binary Deploy',
+    description: 'The React SPA is embedded into the Go binary at build time. One Docker container, one port, done. No nginx, no reverse proxy config.',
+  },
+]
+
+const limitations = [
+  {
+    title: 'No Source Maps',
+    description: 'Minified stack traces stay minified. No source map upload or processing pipeline.',
+  },
+  {
+    title: 'No Release Tracking',
+    description: 'Release data is stored but there are no release health dashboards or deploy tracking.',
+  },
+  {
+    title: 'No Performance Monitoring',
+    description: 'Transaction and span data from SDKs is not processed. You can route performance signals as warning-level messages via beforeSendTransaction.',
+  },
+  {
+    title: 'Single Instance',
+    description: 'No horizontal scaling, no event buffering queue. Designed for small-to-medium teams, not thousands of events per second.',
+  },
+  {
+    title: 'No Integrations',
+    description: 'No GitHub, GitLab, Jira, or PagerDuty integrations. Alerts go to email or Slack webhooks.',
+  },
+  {
+    title: 'Basic Search',
+    description: 'Filter by level, status, and assignment. No full-text search across event payloads or breadcrumbs.',
+  },
+]
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width" />
+    <title>GoSnag — Lightweight Self-Hosted Error Tracking</title>
+    <meta name="description" content="Sentry-compatible error tracking that runs on 4MB of RAM. Single Go binary, embedded React UI, PostgreSQL. Open source, self-hosted." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <!-- Dot grid background -->
+    <div class="bg-dots" aria-hidden="true"></div>
+
+    <!-- Nav -->
+    <nav>
+      <div class="nav-inner">
+        <a href="/" class="logo">
+          <span class="logo-bracket">[</span>GoSnag<span class="logo-bracket">]</span>
+        </a>
+        <div class="nav-links">
+          <a href="#features">Features</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#limitations">Limitations</a>
+          <a href="https://github.com/darkspock/gosnag" class="nav-cta" target="_blank" rel="noopener">
+            <span class="gh-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            </span>
+            Source
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <header class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="container">
+        <div class="hero-badge">
+          <span class="badge-dot"></span>
+          Self-hosted error tracking
+        </div>
+        <h1>
+          Catch every error.<br/>
+          <span class="hero-accent">Keep nothing else.</span>
+        </h1>
+        <p class="hero-sub">
+          Sentry-compatible error tracking in a single Go binary.
+          4MB of RAM. Zero cloud dependencies. Your errors, your server.
+        </p>
+        <div class="hero-actions">
+          <a href="#quickstart" class="btn-primary">Get Started</a>
+          <a href="#features" class="btn-ghost">See Features</a>
+        </div>
+
+        <!-- Terminal mockup -->
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="terminal-dots">
+              <span class="dot dot-red"></span>
+              <span class="dot dot-yellow"></span>
+              <span class="dot dot-green"></span>
+            </div>
+            <span class="terminal-title">docker stats</span>
+          </div>
+          <div class="terminal-body">
+            <pre><code><span class="t-header">CONTAINER          CPU %     MEM USAGE / LIMIT</span>
+<span class="t-name">gosnag-gosnag-1</span>    <span class="t-cpu">0.00%</span>     <span class="t-mem">4.4MiB</span> / 256MiB
+<span class="t-name">gosnag-db-1</span>        <span class="t-cpu">0.00%</span>     <span class="t-dim">51.6MiB / 256MiB</span></code></pre>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stats -->
+    <section class="stats">
+      <div class="container">
+        <div class="stats-grid">
+          {stats.map((stat, i) => (
+            <div class="stat-card" style={`animation-delay: ${i * 80}ms`}>
+              <span class="stat-value">{stat.value}</span>
+              <span class="stat-label">{stat.label}</span>
+              <span class="stat-detail">{stat.detail}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="features">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">// features</span>
+          <h2>Everything you need.<br/>Nothing you don't.</h2>
+          <p>Built for teams that want error visibility without the complexity or cost of a full observability platform.</p>
+        </div>
+        <div class="features-grid">
+          {features.map((feat, i) => (
+            <div class="feature-card" style={`animation-delay: ${i * 60}ms`}>
+              <div class="feature-icon">{feat.icon}</div>
+              <h3>{feat.title}</h3>
+              <p>{feat.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture -->
+    <section id="architecture" class="architecture">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">// architecture</span>
+          <h2>Opinionated simplicity</h2>
+          <p>Three components. One server. That's the entire production topology.</p>
+        </div>
+        <div class="arch-diagram">
+          <div class="arch-flow">
+            <div class="arch-node arch-sdk">
+              <span class="arch-node-label">Sentry SDK</span>
+              <span class="arch-node-sub">Any platform</span>
+            </div>
+            <div class="arch-arrow">
+              <span class="arch-arrow-line"></span>
+              <span class="arch-arrow-label">/api/{'{id}'}/store</span>
+            </div>
+            <div class="arch-node arch-go">
+              <span class="arch-node-label">Go Binary</span>
+              <span class="arch-node-sub">Chi router + embedded SPA</span>
+              <div class="arch-node-stats">
+                <span>4.4 MB RAM</span>
+                <span>~12 MB image</span>
+              </div>
+            </div>
+            <div class="arch-arrow">
+              <span class="arch-arrow-line"></span>
+              <span class="arch-arrow-label">sqlc queries</span>
+            </div>
+            <div class="arch-node arch-pg">
+              <span class="arch-node-label">PostgreSQL</span>
+              <span class="arch-node-sub">Single instance</span>
+            </div>
+          </div>
+        </div>
+        <div class="arch-details">
+          <div class="arch-detail">
+            <h4>Why Go?</h4>
+            <p>Go compiles to a single static binary with no runtime dependencies. The garbage collector is tuned for low latency, not throughput — perfect for a request-response service that spends most of its time idle. Memory usage stays flat whether you have 10 or 10,000 issues.</p>
+          </div>
+          <div class="arch-detail">
+            <h4>Why embed the frontend?</h4>
+            <p>Go's <code>embed</code> directive bakes the compiled React SPA into the binary. No separate web server, no static file hosting, no CORS configuration. The same binary that serves the API also serves the dashboard.</p>
+          </div>
+          <div class="arch-detail">
+            <h4>Why PostgreSQL?</h4>
+            <p>It's the most reliable open-source database. The entire schema runs on standard SQL — no extensions, no exotic features. sqlc generates type-safe Go code from plain SQL queries, so there's no ORM layer to leak abstractions.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Why lightweight -->
+    <section class="lightweight">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">// why lightweight</span>
+          <h2>The t3.small thesis</h2>
+          <p>GoSnag runs on a t3.small EC2 instance (2 vCPU, 2 GB RAM, $15/month) — with PostgreSQL on the same box. Here's why that matters.</p>
+        </div>
+        <div class="reasons-grid">
+          <div class="reason-card">
+            <div class="reason-number">01</div>
+            <h4>Infrastructure cost</h4>
+            <p>Sentry's self-hosted setup requires Kafka, Redis, Clickhouse, Snuba, multiple workers, and 16+ GB of RAM. GoSnag needs one server with 2 GB. For a team of 5-20 developers, the error volume doesn't justify the infrastructure.</p>
+          </div>
+          <div class="reason-card">
+            <div class="reason-number">02</div>
+            <h4>Operational burden</h4>
+            <p>Every component is a thing that can fail at 3 AM. GoSnag has two containers: the binary and PostgreSQL. Docker Compose. That's the entire runbook. Backup the database, update the image, done.</p>
+          </div>
+          <div class="reason-card">
+            <div class="reason-number">03</div>
+            <h4>Cold start &amp; recovery</h4>
+            <p>The Go binary starts in milliseconds. After a deploy or crash, the service is accepting events before the load balancer's health check interval expires. No JVM warmup, no interpreter boot, no dependency tree to resolve.</p>
+          </div>
+          <div class="reason-card">
+            <div class="reason-number">04</div>
+            <h4>Data sovereignty</h4>
+            <p>Error payloads contain stack traces, request headers, user data, and environment variables. Running your own instance means this data never leaves your network. Compliance is trivial when there's no third party.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Limitations -->
+    <section id="limitations" class="limitations">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">// limitations</span>
+          <h2>What GoSnag is not</h2>
+          <p>Honest constraints. GoSnag is a focused tool, not a platform. These are deliberate tradeoffs, not a roadmap.</p>
+        </div>
+        <div class="limitations-grid">
+          {limitations.map((lim) => (
+            <div class="limitation-card">
+              <div class="limitation-x">x</div>
+              <h4>{lim.title}</h4>
+              <p>{lim.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- Quickstart -->
+    <section id="quickstart" class="quickstart">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">// quickstart</span>
+          <h2>Running in 60 seconds</h2>
+        </div>
+        <div class="quickstart-steps">
+          <div class="qs-step">
+            <div class="qs-number">1</div>
+            <div class="qs-content">
+              <h4>Clone and configure</h4>
+              <div class="code-block">
+                <pre><code>git clone https://github.com/darkspock/gosnag.git
+cd gosnag
+cp .env.example .env
+# Edit .env with your Google OAuth credentials and DB password</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="qs-step">
+            <div class="qs-number">2</div>
+            <div class="qs-content">
+              <h4>Start with Docker Compose</h4>
+              <div class="code-block">
+                <pre><code>docker compose up --build -d</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="qs-step">
+            <div class="qs-number">3</div>
+            <div class="qs-content">
+              <h4>Create admin user</h4>
+              <p class="qs-desc">The first user needs to be promoted to admin via the database. After that, admins can invite other users from the UI.</p>
+              <div class="code-block">
+                <pre><code><span class="t-comment"># Local Docker setup</span>
+make admin EMAIL=you@example.com
+
+<span class="t-comment"># Or run the SQL directly</span>
+docker compose exec db psql -U gosnag -c \
+  <span class="t-string">"INSERT INTO users (id, email, name, role, created_at, updated_at)
+   VALUES (gen_random_uuid(), 'you@example.com', 'you@example.com',
+   'admin', now(), now())
+   ON CONFLICT (email) DO UPDATE SET role = 'admin';"</span></code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="qs-step">
+            <div class="qs-number">4</div>
+            <div class="qs-content">
+              <h4>Point your Sentry SDK</h4>
+              <div class="code-block">
+                <pre><code><span class="t-comment">// Any Sentry SDK — PHP, JS, Python, Go, Ruby...</span>
+Sentry.init({"{"}<br/>  dsn: <span class="t-string">"https://&lt;key&gt;@your-server.com/&lt;project-id&gt;"</span>,<br/>{"}"});</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta">
+      <div class="container">
+        <div class="cta-inner">
+          <h2>Your errors deserve a home<br/>that doesn't cost $29/month per seat.</h2>
+          <div class="hero-actions">
+            <a href="https://github.com/darkspock/gosnag" class="btn-primary" target="_blank" rel="noopener">View on GitHub</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div class="container">
+        <div class="footer-inner">
+          <span class="footer-logo">
+            <span class="logo-bracket">[</span>GoSnag<span class="logo-bracket">]</span>
+          </span>
+          <span class="footer-text">MIT License. Built with Go, React, and PostgreSQL.</span>
+        </div>
+      </div>
+    </footer>
+
+    <style is:global>
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --bg: #08080a;
+        --surface: #111114;
+        --surface-2: #19191e;
+        --border: #25252b;
+        --border-light: #2f2f38;
+        --text: #e4e4e7;
+        --text-muted: #71717a;
+        --text-dim: #52525b;
+        --cyan: #06b6d4;
+        --cyan-dim: #0891b2;
+        --cyan-glow: rgba(6, 182, 212, 0.15);
+        --amber: #f59e0b;
+        --amber-dim: rgba(245, 158, 11, 0.15);
+        --red: #ef4444;
+        --green: #10b981;
+        --font-display: 'Bricolage Grotesque', sans-serif;
+        --font-body: 'Outfit', sans-serif;
+        --font-mono: 'JetBrains Mono', monospace;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      body {
+        font-family: var(--font-body);
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        overflow-x: hidden;
+        position: relative;
+      }
+
+      .bg-dots {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+        background-size: 32px 32px;
+        opacity: 0.4;
+        mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 20%, transparent 100%);
+        -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 20%, transparent 100%);
+      }
+
+      .container {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0 24px;
+        position: relative;
+        z-index: 1;
+      }
+
+      /* ---- Nav ---- */
+      nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 100;
+        background: rgba(8, 8, 10, 0.8);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .nav-inner {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 56px;
+      }
+
+      .logo {
+        font-family: var(--font-mono);
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text);
+        text-decoration: none;
+        letter-spacing: -0.02em;
+      }
+
+      .logo-bracket {
+        color: var(--cyan);
+        font-weight: 400;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+      }
+
+      .nav-links a {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.2s;
+        font-weight: 400;
+      }
+
+      .nav-links a:hover {
+        color: var(--text);
+      }
+
+      .nav-cta {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 0.85rem;
+        transition: border-color 0.2s, background 0.2s;
+      }
+
+      .nav-cta:hover {
+        border-color: var(--border-light);
+        background: var(--surface);
+      }
+
+      .gh-icon {
+        display: flex;
+        align-items: center;
+      }
+
+      /* ---- Hero ---- */
+      .hero {
+        padding: 160px 0 80px;
+        text-align: center;
+        position: relative;
+      }
+
+      .hero-glow {
+        position: absolute;
+        top: 60px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 600px;
+        height: 400px;
+        background: radial-gradient(ellipse, var(--cyan-glow) 0%, transparent 70%);
+        filter: blur(60px);
+        pointer-events: none;
+      }
+
+      .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 16px;
+        border: 1px solid var(--border);
+        border-radius: 100px;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        margin-bottom: 32px;
+        background: var(--surface);
+        animation: fadeUp 0.6s ease both;
+      }
+
+      .badge-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 8px var(--green);
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      .hero h1 {
+        font-family: var(--font-display);
+        font-size: clamp(2.9rem, 6vw, 4.3rem);
+        font-weight: 800;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        margin-bottom: 24px;
+        animation: fadeUp 0.6s ease 0.1s both;
+      }
+
+      .hero-accent {
+        background: linear-gradient(135deg, var(--cyan) 0%, var(--cyan-dim) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .hero-sub {
+        font-size: 1.15rem;
+        color: var(--text-muted);
+        max-width: 560px;
+        margin: 0 auto 36px;
+        line-height: 1.7;
+        font-weight: 300;
+        animation: fadeUp 0.6s ease 0.2s both;
+      }
+
+      .hero-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        animation: fadeUp 0.6s ease 0.3s both;
+      }
+
+      .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        padding: 10px 24px;
+        background: var(--cyan);
+        color: #000;
+        font-weight: 600;
+        font-size: 0.9rem;
+        border-radius: 8px;
+        text-decoration: none;
+        transition: opacity 0.2s, transform 0.2s;
+        font-family: var(--font-body);
+      }
+
+      .btn-primary:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+      }
+
+      .btn-ghost {
+        display: inline-flex;
+        align-items: center;
+        padding: 10px 24px;
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        font-weight: 500;
+        font-size: 0.9rem;
+        border-radius: 8px;
+        text-decoration: none;
+        transition: border-color 0.2s, color 0.2s, background 0.2s;
+        font-family: var(--font-body);
+      }
+
+      .btn-ghost:hover {
+        border-color: var(--border-light);
+        color: var(--text);
+        background: var(--surface);
+      }
+
+      /* ---- Terminal ---- */
+      .terminal {
+        max-width: 600px;
+        margin: 56px auto 0;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--surface);
+        text-align: left;
+        animation: fadeUp 0.6s ease 0.45s both;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+      }
+
+      .terminal-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface-2);
+      }
+
+      .terminal-dots {
+        display: flex;
+        gap: 6px;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+      }
+
+      .dot-red { background: #ef4444; }
+      .dot-yellow { background: #f59e0b; }
+      .dot-green { background: #10b981; }
+
+      .terminal-title {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--text-dim);
+      }
+
+      .terminal-body {
+        padding: 20px;
+        overflow-x: auto;
+      }
+
+      .terminal-body pre {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        line-height: 1.8;
+        color: var(--text-muted);
+      }
+
+      .t-header { color: var(--text-dim); }
+      .t-name { color: var(--text); }
+      .t-cpu { color: var(--green); }
+      .t-mem { color: var(--cyan); font-weight: 600; }
+      .t-dim { color: var(--text-dim); }
+      .t-comment { color: var(--text-dim); }
+      .t-string { color: var(--green); }
+
+      /* ---- Stats ---- */
+      .stats {
+        padding: 64px 0;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .stat-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 32px 16px;
+        background: var(--bg);
+        animation: fadeUp 0.5s ease both;
+      }
+
+      .stat-value {
+        font-family: var(--font-mono);
+        font-size: 1.8rem;
+        font-weight: 600;
+        color: var(--cyan);
+        letter-spacing: -0.02em;
+      }
+
+      .stat-label {
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--text);
+        margin-top: 4px;
+      }
+
+      .stat-detail {
+        font-size: 0.75rem;
+        color: var(--text-dim);
+        margin-top: 2px;
+        font-family: var(--font-mono);
+      }
+
+      /* ---- Section Headers ---- */
+      .section-header {
+        text-align: center;
+        margin-bottom: 56px;
+      }
+
+      .section-tag {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        color: var(--cyan-dim);
+        display: block;
+        margin-bottom: 16px;
+        letter-spacing: 0.02em;
+      }
+
+      .section-header h2 {
+        font-family: var(--font-display);
+        font-size: clamp(1.8rem, 4vw, 2.6rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+        margin-bottom: 16px;
+      }
+
+      .section-header p {
+        color: var(--text-muted);
+        font-size: 1.05rem;
+        max-width: 560px;
+        margin: 0 auto;
+        font-weight: 300;
+      }
+
+      /* ---- Features ---- */
+      .features {
+        padding: 100px 0;
+      }
+
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .feature-card {
+        padding: 32px 28px;
+        background: var(--bg);
+        transition: background 0.3s;
+        animation: fadeUp 0.5s ease both;
+      }
+
+      .feature-card:hover {
+        background: var(--surface);
+      }
+
+      .feature-icon {
+        font-family: var(--font-mono);
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--cyan);
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        margin-bottom: 20px;
+      }
+
+      .feature-card h3 {
+        font-family: var(--font-display);
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        letter-spacing: -0.01em;
+      }
+
+      .feature-card p {
+        color: var(--text-muted);
+        font-size: 0.88rem;
+        line-height: 1.6;
+        font-weight: 300;
+      }
+
+      /* ---- Architecture ---- */
+      .architecture {
+        padding: 100px 0;
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+      }
+
+      .arch-diagram {
+        margin-bottom: 56px;
+      }
+
+      .arch-flow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        padding: 40px 0;
+        overflow-x: auto;
+      }
+
+      .arch-node {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 24px 32px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--bg);
+        min-width: 180px;
+        text-align: center;
+        position: relative;
+      }
+
+      .arch-go {
+        border-color: var(--cyan-dim);
+        box-shadow: 0 0 24px var(--cyan-glow);
+      }
+
+      .arch-node-label {
+        font-family: var(--font-mono);
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      .arch-node-sub {
+        font-size: 0.75rem;
+        color: var(--text-dim);
+        margin-top: 4px;
+      }
+
+      .arch-node-stats {
+        display: flex;
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .arch-node-stats span {
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        padding: 3px 8px;
+        background: var(--cyan-glow);
+        color: var(--cyan);
+        border-radius: 4px;
+      }
+
+      .arch-arrow {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 0 8px;
+        min-width: 80px;
+      }
+
+      .arch-arrow-line {
+        display: block;
+        width: 100%;
+        height: 1px;
+        background: linear-gradient(90deg, var(--border) 0%, var(--cyan-dim) 50%, var(--border) 100%);
+        position: relative;
+      }
+
+      .arch-arrow-line::after {
+        content: '';
+        position: absolute;
+        right: -4px;
+        top: -3px;
+        border: 4px solid transparent;
+        border-left: 6px solid var(--cyan-dim);
+      }
+
+      .arch-arrow-label {
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
+
+      .arch-details {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
+
+      .arch-detail {
+        padding: 24px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--bg);
+      }
+
+      .arch-detail h4 {
+        font-family: var(--font-display);
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        letter-spacing: -0.01em;
+      }
+
+      .arch-detail p {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        line-height: 1.65;
+        font-weight: 300;
+      }
+
+      .arch-detail code {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        padding: 2px 6px;
+        background: var(--surface-2);
+        border-radius: 4px;
+        color: var(--cyan);
+      }
+
+      /* ---- Lightweight ---- */
+      .lightweight {
+        padding: 100px 0;
+      }
+
+      .reasons-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 24px;
+      }
+
+      .reason-card {
+        padding: 32px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        position: relative;
+      }
+
+      .reason-number {
+        font-family: var(--font-mono);
+        font-size: 2.4rem;
+        font-weight: 600;
+        color: var(--border-light);
+        position: absolute;
+        top: 20px;
+        right: 24px;
+        line-height: 1;
+      }
+
+      .reason-card h4 {
+        font-family: var(--font-display);
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        letter-spacing: -0.01em;
+      }
+
+      .reason-card p {
+        color: var(--text-muted);
+        font-size: 0.88rem;
+        line-height: 1.65;
+        font-weight: 300;
+      }
+
+      /* ---- Limitations ---- */
+      .limitations {
+        padding: 100px 0;
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+      }
+
+      .limitations-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .limitation-card {
+        padding: 28px 24px;
+        background: var(--bg);
+      }
+
+      .limitation-x {
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--red);
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: 6px;
+        background: rgba(239, 68, 68, 0.05);
+        margin-bottom: 16px;
+      }
+
+      .limitation-card h4 {
+        font-family: var(--font-display);
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+        letter-spacing: -0.01em;
+      }
+
+      .limitation-card p {
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        line-height: 1.6;
+        font-weight: 300;
+      }
+
+      /* ---- Quickstart ---- */
+      .quickstart {
+        padding: 100px 0;
+      }
+
+      .quickstart-steps {
+        max-width: 720px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 32px;
+      }
+
+      .qs-step {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+      }
+
+      .qs-number {
+        font-family: var(--font-mono);
+        font-size: 1.6rem;
+        font-weight: 600;
+        color: var(--cyan);
+        min-width: 36px;
+        text-align: center;
+        line-height: 1;
+        padding-top: 4px;
+      }
+
+      .qs-content {
+        flex: 1;
+      }
+
+      .qs-content h4 {
+        font-family: var(--font-display);
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 12px;
+        letter-spacing: -0.01em;
+      }
+
+      .qs-desc {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 12px;
+        font-weight: 300;
+        line-height: 1.6;
+      }
+
+      .code-block {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+
+      .code-block pre {
+        padding: 20px;
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        line-height: 1.7;
+        color: var(--text-muted);
+        overflow-x: auto;
+      }
+
+      /* ---- CTA ---- */
+      .cta {
+        padding: 100px 0;
+        border-top: 1px solid var(--border);
+      }
+
+      .cta-inner {
+        text-align: center;
+        padding: 64px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .cta-inner::before {
+        content: '';
+        position: absolute;
+        top: -100px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 400px;
+        height: 200px;
+        background: radial-gradient(ellipse, var(--cyan-glow) 0%, transparent 70%);
+        filter: blur(40px);
+        pointer-events: none;
+      }
+
+      .cta h2 {
+        font-family: var(--font-display);
+        font-size: clamp(1.4rem, 3vw, 2rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.3;
+        margin-bottom: 28px;
+        position: relative;
+      }
+
+      /* ---- Footer ---- */
+      footer {
+        padding: 32px 0;
+        border-top: 1px solid var(--border);
+      }
+
+      .footer-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .footer-logo {
+        font-family: var(--font-mono);
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--text-dim);
+      }
+
+      .footer-text {
+        font-size: 0.8rem;
+        color: var(--text-dim);
+      }
+
+      /* ---- Animations ---- */
+      @keyframes fadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+
+      /* ---- Responsive ---- */
+      @media (max-width: 768px) {
+        .stats-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .features-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .arch-flow {
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .arch-arrow {
+          transform: rotate(90deg);
+          padding: 4px 0;
+          min-width: unset;
+        }
+
+        .arch-details {
+          grid-template-columns: 1fr;
+        }
+
+        .reasons-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .limitations-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .nav-links a:not(.nav-cta) {
+          display: none;
+        }
+
+        .qs-step {
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .footer-inner {
+          flex-direction: column;
+          gap: 8px;
+          text-align: center;
+        }
+
+        .cta-inner {
+          padding: 40px 24px;
+        }
+      }
+    </style>
+  </body>
+</html>
