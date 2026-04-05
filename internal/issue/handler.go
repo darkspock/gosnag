@@ -168,8 +168,17 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Convert to JSON-safe format
+	safeIssues := make([]map[string]any, len(enriched))
+	for i, e := range enriched {
+		m := issueJSON(e.Issue)
+		m["user_count"] = e.UserCount
+		m["trend"] = e.Trend
+		safeIssues[i] = m
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"issues": enriched,
+		"issues": safeIssues,
 		"total":  count,
 		"limit":  limit,
 		"offset": offset,
@@ -181,7 +190,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, issue)
+	writeJSON(w, http.StatusOK, issueJSON(issue))
 }
 
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
@@ -264,7 +273,7 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, issue)
+	writeJSON(w, http.StatusOK, issueJSON(issue))
 }
 
 func (h *Handler) Assign(w http.ResponseWriter, r *http.Request) {
@@ -303,7 +312,7 @@ func (h *Handler) Assign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, issue)
+	writeJSON(w, http.StatusOK, issueJSON(issue))
 }
 
 func (h *Handler) BulkDelete(w http.ResponseWriter, r *http.Request) {
@@ -476,6 +485,51 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// issueJSON converts a db.Issue to a JSON-safe map, converting sql.Null* to nil.
+func issueJSON(i db.Issue) map[string]any {
+	m := map[string]any{
+		"id":                    i.ID,
+		"project_id":           i.ProjectID,
+		"title":                i.Title,
+		"fingerprint":          i.Fingerprint,
+		"status":               i.Status,
+		"level":                i.Level,
+		"platform":             i.Platform,
+		"first_seen":           i.FirstSeen,
+		"last_seen":            i.LastSeen,
+		"event_count":          i.EventCount,
+		"assigned_to":          nullUUID(i.AssignedTo),
+		"resolved_at":          nullTime(i.ResolvedAt),
+		"cooldown_until":       nullTime(i.CooldownUntil),
+		"resolved_in_release":  nullString(i.ResolvedInRelease),
+		"created_at":           i.CreatedAt,
+		"updated_at":           i.UpdatedAt,
+		"snooze_until":         nullTime(i.SnoozeUntil),
+		"snooze_event_threshold": nullInt32(i.SnoozeEventThreshold),
+		"snooze_events_at_start": i.SnoozeEventsAtStart,
+		"jira_ticket_key":      nullString(i.JiraTicketKey),
+		"jira_ticket_url":      nullString(i.JiraTicketUrl),
+	}
+	return m
+}
+
+func nullString(ns sql.NullString) any {
+	if ns.Valid { return ns.String }
+	return nil
+}
+func nullTime(nt sql.NullTime) any {
+	if nt.Valid { return nt.Time }
+	return nil
+}
+func nullUUID(nu uuid.NullUUID) any {
+	if nu.Valid { return nu.UUID }
+	return nil
+}
+func nullInt32(ni sql.NullInt32) any {
+	if ni.Valid { return ni.Int32 }
+	return nil
 }
 
 func resolveCooldownMinutes(projectDefault int32, requested *int) *int {

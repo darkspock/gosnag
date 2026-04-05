@@ -141,5 +141,5 @@ func (h *Handler) Merge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, updated)
+	writeJSON(w, http.StatusOK, issueJSON(updated))
 }
