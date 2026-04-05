@@ -24,6 +24,18 @@ type AlertConfig struct {
 	TitlePattern string          `json:"title_pattern"`
 }
 
+type ApiToken struct {
+	ID         uuid.UUID     `json:"id"`
+	ProjectID  uuid.UUID     `json:"project_id"`
+	TokenHash  string        `json:"token_hash"`
+	Name       string        `json:"name"`
+	Permission string        `json:"permission"`
+	LastUsedAt sql.NullTime  `json:"last_used_at"`
+	ExpiresAt  sql.NullTime  `json:"expires_at"`
+	CreatedBy  uuid.NullUUID `json:"created_by"`
+	CreatedAt  time.Time     `json:"created_at"`
+}
+
 type Event struct {
 	ID             uuid.UUID       `json:"id"`
 	IssueID        uuid.UUID       `json:"issue_id"`

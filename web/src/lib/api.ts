@@ -80,6 +80,13 @@ export const api = {
   updateUserStatus: (userId: string, status: string) =>
     request<User>(`/users/${userId}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
 
+  // API Tokens
+  listTokens: (projectId: string) => request<APIToken[]>(`/projects/${projectId}/tokens`),
+  createToken: (projectId: string, data: { name: string; permission: string; expires_in?: number }) =>
+    request<APIToken & { token: string }>(`/projects/${projectId}/tokens`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteToken: (projectId: string, tokenId: string) =>
+    request<void>(`/projects/${projectId}/tokens/${tokenId}`, { method: 'DELETE' }),
+
   // Alerts
   listAlerts: (projectId: string) => request<AlertConfig[]>(`/projects/${projectId}/alerts`),
   createAlert: (projectId: string, data: { alert_type: string; config: object; enabled: boolean; level_filter?: string; title_pattern?: string }) =>
@@ -178,6 +185,17 @@ export interface IssueCounts {
   today: number
   assigned_to_me: number
   assigned_any: number
+}
+
+export interface APIToken {
+  id: string
+  project_id: string
+  name: string
+  permission: string
+  token?: string
+  last_used_at: string | null
+  expires_at: string | null
+  created_at: string
 }
 
 export interface AlertConfig {

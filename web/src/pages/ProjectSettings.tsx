@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, type ProjectWithDSN, type AlertConfig } from '@/lib/api'
+import { api, type ProjectWithDSN, type AlertConfig, type APIToken } from '@/lib/api'
 import { useAuth } from '@/lib/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
-import { Copy, Plus, Trash2, Pencil } from 'lucide-react'
+import { Copy, Plus, Trash2, Pencil, Key } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
 
@@ -30,6 +30,14 @@ export default function ProjectSettings() {
   const navigate = useNavigate()
   const [project, setProject] = useState<ProjectWithDSN | null>(null)
   const [alerts, setAlerts] = useState<AlertConfig[]>([])
+  const [tokens, setTokens] = useState<APIToken[]>([])
+  const [showTokenForm, setShowTokenForm] = useState(false)
+  const [tokenName, setTokenName] = useState('')
+  const [tokenPermission, setTokenPermission] = useState('read')
+  const [tokenExpiresIn, setTokenExpiresIn] = useState('')
+  const [newToken, setNewToken] = useState<string | null>(null)
+  const [showDeleteToken, setShowDeleteToken] = useState<string | null>(null)
+  const [tokenCopied, setTokenCopied] = useState(false)
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [defaultCooldown, setDefaultCooldown] = useState('60')
@@ -60,6 +68,7 @@ export default function ProjectSettings() {
         setDefaultCooldown(String(p.default_cooldown_minutes ?? 60))
       }),
       api.listAlerts(projectId).then(setAlerts),
+      api.listTokens(projectId).then(setTokens),
     ]).finally(() => setLoading(false))
   }, [projectId])
 
@@ -166,6 +175,42 @@ export default function ProjectSettings() {
     await api.deleteAlert(projectId, alertId)
     setAlerts(await api.listAlerts(projectId))
     toast.success('Alert deleted')
+  }
+
+  const handleCreateToken = async () => {
+    if (!projectId) return
+    try {
+      const expiresIn = tokenExpiresIn ? parseInt(tokenExpiresIn) : undefined
+      const result = await api.createToken(projectId, {
+        name: tokenName,
+        permission: tokenPermission,
+        expires_in: expiresIn,
+      })
+      setNewToken(result.token)
+      setTokens(await api.listTokens(projectId))
+      setTokenName('')
+      setTokenPermission('read')
+      setTokenExpiresIn('')
+      toast.success('API token created')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to create token')
+    }
+  }
+
+  const handleDeleteToken = async (tokenId: string) => {
+    if (!projectId) return
+    await api.deleteToken(projectId, tokenId)
+    setTokens(await api.listTokens(projectId))
+    toast.success('Token revoked')
+  }
+
+  const handleCopyToken = () => {
+    if (newToken) {
+      navigator.clipboard.writeText(newToken)
+      setTokenCopied(true)
+      setTimeout(() => setTokenCopied(false), 2000)
+      toast.success('Token copied to clipboard')
+    }
   }
 
   const formatAlertDestination = (a: AlertConfig) => {
@@ -336,6 +381,132 @@ export default function ProjectSettings() {
           )}
         </CardContent>
       </Card>
+
+      {/* API Tokens */}
+      <Card className="mb-6">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Key className="h-4 w-4" /> API Tokens
+          </CardTitle>
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={() => { setShowTokenForm(true); setNewToken(null) }}>
+              <Plus className="h-4 w-4 mr-1" /> Create Token
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {tokens.length === 0 && !newToken ? (
+            <div className="text-center py-6 text-muted-foreground">
+              <p className="text-sm">No API tokens yet.</p>
+              <p className="text-xs mt-1 text-muted-foreground/60">Create a token to access this project's API from external systems.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {tokens.map(t => (
+                <div key={t.id} className="p-3 border rounded-md">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{t.name}</span>
+                      <span className={cn(
+                        'text-xs px-1.5 py-0.5 rounded',
+                        t.permission === 'readwrite'
+                          ? 'bg-amber-500/15 text-amber-400'
+                          : 'bg-blue-500/15 text-blue-400'
+                      )}>
+                        {t.permission}
+                      </span>
+                    </div>
+                    {isAdmin && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDeleteToken(t.id)}>
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Revoke token</TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
+                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                    <span>Created {new Date(t.created_at).toLocaleDateString()}</span>
+                    {t.last_used_at && <span>Last used {new Date(t.last_used_at).toLocaleDateString()}</span>}
+                    {t.expires_at && <span>Expires {new Date(t.expires_at).toLocaleDateString()}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Create Token Dialog */}
+      <Dialog open={showTokenForm} onOpenChange={open => { if (!open) { setShowTokenForm(false); setNewToken(null) } }}>
+        <DialogContent>
+          <DialogTitle>Create API Token</DialogTitle>
+          <DialogDescription className="sr-only">Create a new API token for external access</DialogDescription>
+          {newToken ? (
+            <div className="mt-4 space-y-4">
+              <p className="text-sm text-amber-400">Copy this token now. It won't be shown again.</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono break-all">{newToken}</code>
+                <Button variant="outline" size="icon" onClick={handleCopyToken}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              {tokenCopied && <p className="text-xs text-emerald-400">Copied!</p>}
+              <p className="text-xs text-muted-foreground">
+                Use this token as: <code className="text-xs">Authorization: Bearer {newToken.substring(0, 12)}...</code>
+              </p>
+              <div className="flex justify-end">
+                <Button onClick={() => { setShowTokenForm(false); setNewToken(null) }}>Done</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="text-sm font-medium">Name</label>
+                <Input
+                  value={tokenName}
+                  onChange={e => setTokenName(e.target.value)}
+                  placeholder="e.g. CI/CD, Monitoring, Dashboard"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Permission</label>
+                <Select value={tokenPermission} onChange={e => setTokenPermission(e.target.value)} className="mt-1">
+                  <option value="read">Read only — list and view issues</option>
+                  <option value="readwrite">Read & Write — also resolve, assign, delete</option>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Expires in</label>
+                <Select value={tokenExpiresIn} onChange={e => setTokenExpiresIn(e.target.value)} className="mt-1">
+                  <option value="">Never</option>
+                  <option value="30">30 days</option>
+                  <option value="90">90 days</option>
+                  <option value="365">1 year</option>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowTokenForm(false)}>Cancel</Button>
+                <Button onClick={handleCreateToken} disabled={!tokenName.trim()}>Create</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Revoke Token Confirm */}
+      <ConfirmDialog
+        open={!!showDeleteToken}
+        onOpenChange={open => { if (!open) setShowDeleteToken(null) }}
+        title="Revoke Token"
+        description="This token will be permanently revoked. Any systems using it will lose access immediately."
+        confirmLabel="Revoke"
+        variant="destructive"
+        onConfirm={() => { if (showDeleteToken) handleDeleteToken(showDeleteToken) }}
+      />
 
       {/* Delete Project Confirm */}
       <ConfirmDialog

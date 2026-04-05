@@ -89,9 +89,9 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 		r.Post("/logout", oauthHandler.Logout)
 	})
 
-	// Management API (session required)
+	// Management API (session or API token)
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(auth.Middleware(queries, cfg.BaseURL))
+		r.Use(auth.MiddlewareWithToken(queries, cfg.BaseURL))
 
 		r.Get("/me", oauthHandler.Me)
 
@@ -104,6 +104,13 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 				r.With(auth.RequireAdmin).Put("/", projectHandler.Update)
 				r.With(auth.RequireAdmin).Delete("/", projectHandler.Delete)
 
+				// API Tokens per project
+				r.Route("/tokens", func(r chi.Router) {
+					r.Get("/", projectHandler.ListTokens)
+					r.With(auth.RequireAdmin).Post("/", projectHandler.CreateToken)
+					r.With(auth.RequireAdmin).Delete("/{tokenId}", projectHandler.DeleteToken)
+				})
+
 				// Alerts per project
 				r.Route("/alerts", func(r chi.Router) {
 					r.Get("/", alertHandler.List)
@@ -114,20 +121,20 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 			})
 		})
 
-		// Issues
+		// Issues (readable by API tokens, writable needs readwrite permission)
 		r.Route("/projects/{project_id}/issues", func(r chi.Router) {
 			r.Get("/", issueHandler.List)
-			r.Delete("/", issueHandler.BulkDelete)
+			r.With(auth.RequireWritePermission).Delete("/", issueHandler.BulkDelete)
 			r.Get("/counts", issueHandler.Counts)
 			r.Route("/{issue_id}", func(r chi.Router) {
 				r.Get("/", issueHandler.Get)
-				r.Put("/", issueHandler.UpdateStatus)
-				r.Put("/assign", issueHandler.Assign)
+				r.With(auth.RequireWritePermission).Put("/", issueHandler.UpdateStatus)
+				r.With(auth.RequireWritePermission).Put("/assign", issueHandler.Assign)
 				r.Get("/events", issueHandler.ListEvents)
 			})
 		})
 
-		// Users (admin only for write)
+		// Users (admin only for write, session only)
 		r.Route("/users", func(r chi.Router) {
 			r.Get("/", userHandler.List)
 			r.With(auth.RequireAdmin).Post("/invite", userHandler.Invite)
