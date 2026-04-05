@@ -387,19 +387,19 @@ export default function ProjectSettings() {
     {
       id: 'general' as const,
       label: 'General',
-      description: 'Identity, DSN, defaults, and warning behavior',
+      badge: 'Core',
       icon: Settings,
     },
     {
       id: 'alerts' as const,
       label: 'Alerts',
-      description: `${alerts.length} configured notification flow${alerts.length === 1 ? '' : 's'}`,
+      badge: `${alerts.length}`,
       icon: Bell,
     },
     {
       id: 'tokens' as const,
       label: 'API Tokens',
-      description: `${tokens.length} project token${tokens.length === 1 ? '' : 's'} available`,
+      badge: `${tokens.length}`,
       icon: Key,
     },
     ...(isAdmin
@@ -407,13 +407,13 @@ export default function ProjectSettings() {
           {
             id: 'integrations' as const,
             label: 'Integrations',
-            description: project?.jira_api_token_set ? 'Jira connected and ready' : 'Connect Jira and automation',
+            badge: project?.jira_api_token_set ? 'Connected' : 'Setup',
             icon: Workflow,
           },
           {
             id: 'danger' as const,
             label: 'Danger Zone',
-            description: 'Project deletion and destructive actions',
+            badge: 'Admin',
             icon: ShieldAlert,
           },
         ]
@@ -436,48 +436,44 @@ export default function ProjectSettings() {
 
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold">Project Settings</h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Settings are split by responsibility so project defaults, integrations, notifications, access, and destructive
-          actions do not compete on the same screen.
-        </p>
+        <p className="max-w-3xl text-sm text-muted-foreground">Switch sections without mixing unrelated forms and actions.</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[240px,minmax(0,1fr)]">
-        <aside className="lg:sticky lg:top-6 h-max">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Sections</CardTitle>
-              <CardDescription>Jump between configuration areas without scrolling through unrelated forms.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-              {sections.map(section => {
-                const Icon = section.icon
-                const isActive = activeSection === section.id
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => setActiveSection(section.id)}
+      <div className="space-y-6">
+        <div className="overflow-x-auto pb-1">
+          <div className="inline-flex min-w-full gap-2 rounded-xl border bg-card p-1.5">
+            {sections.map(section => {
+              const Icon = section.icon
+              const isActive = activeSection === section.id
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveSection(section.id)}
+                  className={cn(
+                    'flex min-w-fit items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{section.label}</span>
+                  <span
                     className={cn(
-                      'w-full rounded-lg border px-3 py-3 text-left transition-colors',
+                      'rounded-full px-2 py-0.5 text-[11px]',
                       isActive
-                        ? 'border-primary/40 bg-primary/5 shadow-sm'
-                        : 'border-border/60 hover:border-border hover:bg-accent/40'
+                        ? 'bg-primary-foreground/15 text-primary-foreground'
+                        : 'bg-muted text-foreground/70'
                     )}
                   >
-                    <div className="flex items-start gap-3">
-                      <Icon className={cn('mt-0.5 h-4 w-4', isActive ? 'text-primary' : 'text-muted-foreground')} />
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium">{section.label}</div>
-                        <p className="mt-1 text-xs text-muted-foreground">{section.description}</p>
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </CardContent>
-          </Card>
-        </aside>
+                    {section.badge}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         <div className="space-y-6">
           {activeSection === 'general' && (

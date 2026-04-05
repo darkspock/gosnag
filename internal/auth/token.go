@@ -57,6 +57,10 @@ func MiddlewareWithToken(queries *db.Queries, baseURL string) func(http.Handler)
 				// Validate token is scoped to the requested project
 				projectID := chi.URLParam(r, "project_id")
 				if projectID == "" {
+					// chi.URLParam may not be available yet in middleware; extract from path
+					projectID = extractProjectIDFromPath(r.URL.Path)
+				}
+				if projectID == "" {
 					// Token auth requires a project-scoped route
 					http.Error(w, `{"error":"api tokens can only access project-scoped endpoints"}`, http.StatusForbidden)
 					return
@@ -100,6 +104,25 @@ func RequireWritePermission(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// extractProjectIDFromPath extracts the project UUID from paths like /api/v1/projects/{uuid}/...
+func extractProjectIDFromPath(path string) string {
+	const prefix = "/api/v1/projects/"
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	rest := path[len(prefix):]
+	// UUID is 36 chars
+	if len(rest) < 36 {
+		return ""
+	}
+	candidate := rest[:36]
+	// Basic UUID validation (8-4-4-4-12 with hyphens)
+	if len(candidate) == 36 && candidate[8] == '-' && candidate[13] == '-' && candidate[18] == '-' && candidate[23] == '-' {
+		return candidate
+	}
+	return ""
 }
 
 func extractBearer(r *http.Request) string {
