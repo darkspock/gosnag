@@ -27,6 +27,11 @@ type CreateProjectRequest struct {
 	Slug                   string `json:"slug"`
 	DefaultCooldownMinutes *int32 `json:"default_cooldown_minutes,omitempty"`
 	WarningAsError         *bool  `json:"warning_as_error,omitempty"`
+	JiraBaseURL            string `json:"jira_base_url"`
+	JiraEmail              string `json:"jira_email"`
+	JiraAPIToken           string `json:"jira_api_token"`
+	JiraProjectKey         string `json:"jira_project_key"`
+	JiraIssueType          string `json:"jira_issue_type"`
 }
 
 type ProjectResponse struct {
@@ -222,12 +227,22 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		warningAsError = *req.WarningAsError
 	}
 
+	jiraIssueType := req.JiraIssueType
+	if jiraIssueType == "" {
+		jiraIssueType = "Bug"
+	}
+
 	project, err := h.queries.UpdateProject(r.Context(), db.UpdateProjectParams{
 		ID:                     id,
 		Name:                   req.Name,
 		Slug:                   req.Slug,
 		DefaultCooldownMinutes: cooldown,
 		WarningAsError:         warningAsError,
+		JiraBaseUrl:            req.JiraBaseURL,
+		JiraEmail:              req.JiraEmail,
+		JiraApiToken:           req.JiraAPIToken,
+		JiraProjectKey:         req.JiraProjectKey,
+		JiraIssueType:          jiraIssueType,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {

@@ -32,7 +32,7 @@ export const api = {
   getProject: (id: string) => request<ProjectWithDSN>(`/projects/${id}`),
   createProject: (data: { name: string; slug?: string; default_cooldown_minutes?: number }) =>
     request<ProjectWithDSN>('/projects', { method: 'POST', body: JSON.stringify(data) }),
-  updateProject: (id: string, data: { name: string; slug: string; default_cooldown_minutes?: number; warning_as_error?: boolean }) =>
+  updateProject: (id: string, data: { name: string; slug: string; default_cooldown_minutes?: number; warning_as_error?: boolean; jira_base_url?: string; jira_email?: string; jira_api_token?: string; jira_project_key?: string; jira_issue_type?: string }) =>
     request<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteProject: (id: string) =>
     request<void>(`/projects/${id}`, { method: 'DELETE' }),
@@ -87,6 +87,19 @@ export const api = {
   deleteToken: (projectId: string, tokenId: string) =>
     request<void>(`/projects/${projectId}/tokens/${tokenId}`, { method: 'DELETE' }),
 
+  // Jira
+  testJiraConnection: (projectId: string) =>
+    request<{ ok: boolean; error?: string }>(`/projects/${projectId}/jira/test`, { method: 'POST' }),
+  createJiraTicket: (projectId: string, issueId: string) =>
+    request<{ key: string; url: string }>(`/projects/${projectId}/issues/${issueId}/jira`, { method: 'POST' }),
+  listJiraRules: (projectId: string) => request<JiraRule[]>(`/projects/${projectId}/jira/rules`),
+  createJiraRule: (projectId: string, data: { name: string; enabled: boolean; level_filter: string; min_events: number; min_users: number; title_pattern: string }) =>
+    request<JiraRule>(`/projects/${projectId}/jira/rules`, { method: 'POST', body: JSON.stringify(data) }),
+  updateJiraRule: (projectId: string, ruleId: string, data: { name: string; enabled: boolean; level_filter: string; min_events: number; min_users: number; title_pattern: string }) =>
+    request<JiraRule>(`/projects/${projectId}/jira/rules/${ruleId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteJiraRule: (projectId: string, ruleId: string) =>
+    request<void>(`/projects/${projectId}/jira/rules/${ruleId}`, { method: 'DELETE' }),
+
   // Alerts
   listAlerts: (projectId: string) => request<AlertConfig[]>(`/projects/${projectId}/alerts`),
   createAlert: (projectId: string, data: { alert_type: string; config: object; enabled: boolean; level_filter?: string; title_pattern?: string }) =>
@@ -114,6 +127,11 @@ export interface Project {
   slug: string
   default_cooldown_minutes: number
   warning_as_error: boolean
+  jira_base_url: string
+  jira_email: string
+  jira_api_token: string
+  jira_project_key: string
+  jira_issue_type: string
   created_at: string
   total_issues?: number
   open_issues?: number
@@ -146,6 +164,8 @@ export interface Issue {
   snooze_until: string | null
   snooze_event_threshold: number | null
   snooze_events_at_start: number
+  jira_ticket_key: string | null
+  jira_ticket_url: string | null
   user_count?: number
   trend?: number[]
 }
@@ -196,6 +216,19 @@ export interface APIToken {
   last_used_at: string | null
   expires_at: string | null
   created_at: string
+}
+
+export interface JiraRule {
+  id: string
+  project_id: string
+  name: string
+  enabled: boolean
+  level_filter: string
+  min_events: number
+  min_users: number
+  title_pattern: string
+  created_at: string
+  updated_at: string
 }
 
 export interface AlertConfig {

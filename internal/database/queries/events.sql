@@ -32,5 +32,10 @@ WHERE issue_id = ANY($1::uuid[])
 GROUP BY issue_id, bucket
 ORDER BY issue_id, bucket;
 
+-- name: GetIssueUserCount :one
+SELECT COUNT(DISTINCT user_identifier)::int as user_count
+FROM events
+WHERE issue_id = $1 AND user_identifier != '';
+
 -- name: DeleteEventsOlderThan :execresult
 DELETE FROM events WHERE created_at < $1;

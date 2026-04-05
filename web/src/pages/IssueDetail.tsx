@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { Check, X, EyeOff, RotateCcw, ChevronDown, ChevronLeft, ChevronRight, Clock, Trash2 } from 'lucide-react'
+import { Check, X, EyeOff, RotateCcw, ChevronDown, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -32,6 +32,7 @@ export default function IssueDetail() {
   const [eventOffset, setEventOffset] = useState(0)
   const [eventTotal, setEventTotal] = useState(0)
   const [showDelete, setShowDelete] = useState(false)
+  const [creatingJira, setCreatingJira] = useState(false)
   const eventLimit = 25
 
   useEffect(() => {
@@ -54,6 +55,20 @@ export default function IssueDetail() {
       setEventTotal(r.total)
     })
   }, [projectId, issueId, eventOffset])
+
+  const handleCreateJiraTicket = async () => {
+    if (!projectId || !issueId) return
+    setCreatingJira(true)
+    try {
+      const result = await api.createJiraTicket(projectId, issueId)
+      setIssue(prev => prev ? { ...prev, jira_ticket_key: result.key, jira_ticket_url: result.url } : prev)
+      toast.success(`Jira ticket ${result.key} created`)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to create Jira ticket')
+    } finally {
+      setCreatingJira(false)
+    }
+  }
 
   const updateStatus = async (status: string, cooldown?: number) => {
     if (!projectId || !issueId) return
@@ -202,6 +217,18 @@ export default function IssueDetail() {
             <Button size="sm" variant="outline" onClick={() => updateStatus('open')}>
               <RotateCcw className="h-4 w-4 mr-1" /> Reopen
             </Button>
+          )}
+          {project?.jira_base_url && !issue.jira_ticket_key && (
+            <Button size="sm" variant="secondary" onClick={handleCreateJiraTicket} disabled={creatingJira}>
+              {creatingJira ? 'Creating...' : 'Jira'}
+            </Button>
+          )}
+          {issue.jira_ticket_key && issue.jira_ticket_url && (
+            <a href={issue.jira_ticket_url} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="outline">
+                {issue.jira_ticket_key} <ExternalLink className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            </a>
           )}
           <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => setShowDelete(true)}>
             <Trash2 className="h-4 w-4" />

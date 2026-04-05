@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"io/fs"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/darkspock/gosnag/internal/database/db"
 	"github.com/darkspock/gosnag/internal/ingest"
 	"github.com/darkspock/gosnag/internal/issue"
+	"github.com/darkspock/gosnag/internal/jira"
 	"github.com/darkspock/gosnag/internal/project"
 	"github.com/darkspock/gosnag/internal/user"
 	"github.com/darkspock/gosnag/web"
@@ -61,11 +63,13 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	issueHandler := issue.NewHandler(queries)
 	userHandler := user.NewHandler(queries)
 	alertHandler := alert.NewHandler(queries)
+	jiraHandler := jira.NewHandler(queries, cfg)
 	oauthHandler := auth.NewOAuthHandler(queries, cfg)
 
 	alertService := alert.NewService(queries, cfg)
 	ingestHandler := ingest.NewHandler(queries, func(projectID uuid.UUID, iss db.Issue, isNew bool) {
 		alertService.Notify(projectID, iss, isNew)
+		go jira.CheckAndCreateTicket(context.Background(), queries, cfg.BaseURL, projectID, iss)
 	})
 
 	r := chi.NewRouter()
@@ -111,6 +115,15 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 					r.With(auth.RequireAdmin).Delete("/{tokenId}", projectHandler.DeleteToken)
 				})
 
+				// Jira integration
+				r.Post("/jira/test", jiraHandler.TestConnection)
+				r.Route("/jira/rules", func(r chi.Router) {
+					r.Get("/", jiraHandler.ListRules)
+					r.With(auth.RequireAdmin).Post("/", jiraHandler.CreateRule)
+					r.With(auth.RequireAdmin).Put("/{rule_id}", jiraHandler.UpdateRule)
+					r.With(auth.RequireAdmin).Delete("/{rule_id}", jiraHandler.DeleteRule)
+				})
+
 				// Alerts per project
 				r.Route("/alerts", func(r chi.Router) {
 					r.Get("/", alertHandler.List)
@@ -131,6 +144,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 				r.With(auth.RequireWritePermission).Put("/", issueHandler.UpdateStatus)
 				r.With(auth.RequireWritePermission).Put("/assign", issueHandler.Assign)
 				r.Get("/events", issueHandler.ListEvents)
+				r.With(auth.RequireWritePermission).Post("/jira", jiraHandler.CreateTicket)
 			})
 		})
 

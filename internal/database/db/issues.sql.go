@@ -18,7 +18,7 @@ const assignIssue = `-- name: AssignIssue :one
 UPDATE issues
 SET assigned_to = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start
+RETURNING id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url
 `
 
 type AssignIssueParams struct {
@@ -49,6 +49,8 @@ func (q *Queries) AssignIssue(ctx context.Context, arg AssignIssueParams) (Issue
 		&i.SnoozeUntil,
 		&i.SnoozeEventThreshold,
 		&i.SnoozeEventsAtStart,
+		&i.JiraTicketKey,
+		&i.JiraTicketUrl,
 	)
 	return i, err
 }
@@ -177,7 +179,7 @@ func (q *Queries) DeleteIssues(ctx context.Context, arg DeleteIssuesParams) (sql
 }
 
 const getExpiredCooldownIssues = `-- name: GetExpiredCooldownIssues :many
-SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start FROM issues
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url FROM issues
 WHERE status = 'resolved'
   AND cooldown_until IS NOT NULL
   AND cooldown_until < now()
@@ -212,6 +214,8 @@ func (q *Queries) GetExpiredCooldownIssues(ctx context.Context) ([]Issue, error)
 			&i.SnoozeUntil,
 			&i.SnoozeEventThreshold,
 			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -227,7 +231,7 @@ func (q *Queries) GetExpiredCooldownIssues(ctx context.Context) ([]Issue, error)
 }
 
 const getExpiredSnoozeIssues = `-- name: GetExpiredSnoozeIssues :many
-SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start FROM issues
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url FROM issues
 WHERE status = 'snoozed'
   AND snooze_until IS NOT NULL
   AND snooze_until < now()
@@ -262,6 +266,8 @@ func (q *Queries) GetExpiredSnoozeIssues(ctx context.Context) ([]Issue, error) {
 			&i.SnoozeUntil,
 			&i.SnoozeEventThreshold,
 			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -277,7 +283,7 @@ func (q *Queries) GetExpiredSnoozeIssues(ctx context.Context) ([]Issue, error) {
 }
 
 const getIssue = `-- name: GetIssue :one
-SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start FROM issues WHERE id = $1
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url FROM issues WHERE id = $1
 `
 
 func (q *Queries) GetIssue(ctx context.Context, id uuid.UUID) (Issue, error) {
@@ -303,6 +309,8 @@ func (q *Queries) GetIssue(ctx context.Context, id uuid.UUID) (Issue, error) {
 		&i.SnoozeUntil,
 		&i.SnoozeEventThreshold,
 		&i.SnoozeEventsAtStart,
+		&i.JiraTicketKey,
+		&i.JiraTicketUrl,
 	)
 	return i, err
 }
@@ -354,7 +362,7 @@ func (q *Queries) GetIssueCountsByStatus(ctx context.Context, arg GetIssueCounts
 
 const listIssuesByProject = `-- name: ListIssuesByProject :many
 
-SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start FROM issues
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url FROM issues
 WHERE project_id = $1
   AND ($2::text = '' OR status = $2::text)
   AND (NOT $5::bool OR first_seen >= CURRENT_DATE)
@@ -426,6 +434,8 @@ func (q *Queries) ListIssuesByProject(ctx context.Context, arg ListIssuesByProje
 			&i.SnoozeUntil,
 			&i.SnoozeEventThreshold,
 			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -451,7 +461,7 @@ SET status = $2,
     snooze_events_at_start = $8,
     updated_at = now()
 WHERE id = $1
-RETURNING id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start
+RETURNING id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url
 `
 
 type UpdateIssueStatusParams struct {
@@ -497,6 +507,8 @@ func (q *Queries) UpdateIssueStatus(ctx context.Context, arg UpdateIssueStatusPa
 		&i.SnoozeUntil,
 		&i.SnoozeEventThreshold,
 		&i.SnoozeEventsAtStart,
+		&i.JiraTicketKey,
+		&i.JiraTicketUrl,
 	)
 	return i, err
 }
@@ -511,7 +523,7 @@ SET last_seen = $6,
     level = EXCLUDED.level,
     platform = EXCLUDED.platform,
     updated_at = now()
-RETURNING id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start
+RETURNING id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url
 `
 
 type UpsertIssueParams struct {
@@ -553,6 +565,8 @@ func (q *Queries) UpsertIssue(ctx context.Context, arg UpsertIssueParams) (Issue
 		&i.SnoozeUntil,
 		&i.SnoozeEventThreshold,
 		&i.SnoozeEventsAtStart,
+		&i.JiraTicketKey,
+		&i.JiraTicketUrl,
 	)
 	return i, err
 }

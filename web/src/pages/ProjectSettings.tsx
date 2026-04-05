@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, type ProjectWithDSN, type AlertConfig, type APIToken } from '@/lib/api'
+import { api, type ProjectWithDSN, type AlertConfig, type APIToken, type JiraRule } from '@/lib/api'
 import { useAuth } from '@/lib/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -38,6 +38,23 @@ export default function ProjectSettings() {
   const [newToken, setNewToken] = useState<string | null>(null)
   const [showDeleteToken, setShowDeleteToken] = useState<string | null>(null)
   const [tokenCopied, setTokenCopied] = useState(false)
+
+  // Jira state
+  const [jiraBaseUrl, setJiraBaseUrl] = useState('')
+  const [jiraEmail, setJiraEmail] = useState('')
+  const [jiraApiToken, setJiraApiToken] = useState('')
+  const [jiraProjectKey, setJiraProjectKey] = useState('')
+  const [jiraIssueType, setJiraIssueType] = useState('Bug')
+  const [jiraTesting, setJiraTesting] = useState(false)
+  const [jiraRules, setJiraRules] = useState<JiraRule[]>([])
+  const [showJiraRuleForm, setShowJiraRuleForm] = useState(false)
+  const [editingRule, setEditingRule] = useState<JiraRule | null>(null)
+  const [ruleName, setRuleName] = useState('')
+  const [ruleLevelFilter, setRuleLevelFilter] = useState('')
+  const [ruleMinEvents, setRuleMinEvents] = useState('')
+  const [ruleMinUsers, setRuleMinUsers] = useState('')
+  const [ruleTitlePattern, setRuleTitlePattern] = useState('')
+  const [showDeleteRule, setShowDeleteRule] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [defaultCooldown, setDefaultCooldown] = useState('60')
@@ -66,15 +83,29 @@ export default function ProjectSettings() {
         setName(p.name)
         setSlug(p.slug)
         setDefaultCooldown(String(p.default_cooldown_minutes ?? 60))
+        setJiraBaseUrl(p.jira_base_url || '')
+        setJiraEmail(p.jira_email || '')
+        setJiraApiToken(p.jira_api_token || '')
+        setJiraProjectKey(p.jira_project_key || '')
+        setJiraIssueType(p.jira_issue_type || 'Bug')
       }),
       api.listAlerts(projectId).then(setAlerts),
       api.listTokens(projectId).then(setTokens),
+      api.listJiraRules(projectId).then(setJiraRules),
     ]).finally(() => setLoading(false))
   }, [projectId])
 
   const handleSave = async () => {
     if (!projectId) return
-    await api.updateProject(projectId, { name, slug, default_cooldown_minutes: parseInt(defaultCooldown) || 0 })
+    await api.updateProject(projectId, {
+      name, slug,
+      default_cooldown_minutes: parseInt(defaultCooldown) || 0,
+      jira_base_url: jiraBaseUrl,
+      jira_email: jiraEmail,
+      jira_api_token: jiraApiToken,
+      jira_project_key: jiraProjectKey,
+      jira_issue_type: jiraIssueType,
+    })
     const updated = await api.getProject(projectId)
     setProject(updated)
     toast.success('Project settings saved')
@@ -202,6 +233,90 @@ export default function ProjectSettings() {
     await api.deleteToken(projectId, tokenId)
     setTokens(await api.listTokens(projectId))
     toast.success('Token revoked')
+  }
+
+  const handleTestJira = async () => {
+    if (!projectId) return
+    setJiraTesting(true)
+    try {
+      // Save first so the backend has the latest config
+      await api.updateProject(projectId, {
+        name, slug,
+        default_cooldown_minutes: parseInt(defaultCooldown) || 0,
+        jira_base_url: jiraBaseUrl, jira_email: jiraEmail, jira_api_token: jiraApiToken,
+        jira_project_key: jiraProjectKey, jira_issue_type: jiraIssueType,
+      })
+      const result = await api.testJiraConnection(projectId)
+      if (result.ok) {
+        toast.success('Jira connection successful')
+      } else {
+        toast.error(result.error || 'Connection failed')
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Connection test failed')
+    } finally {
+      setJiraTesting(false)
+    }
+  }
+
+  const openAddRule = () => {
+    setEditingRule(null)
+    setRuleName('')
+    setRuleLevelFilter('')
+    setRuleMinEvents('')
+    setRuleMinUsers('')
+    setRuleTitlePattern('')
+    setShowJiraRuleForm(true)
+  }
+
+  const openEditRule = (r: JiraRule) => {
+    setEditingRule(r)
+    setRuleName(r.name)
+    setRuleLevelFilter(r.level_filter)
+    setRuleMinEvents(r.min_events > 0 ? String(r.min_events) : '')
+    setRuleMinUsers(r.min_users > 0 ? String(r.min_users) : '')
+    setRuleTitlePattern(r.title_pattern)
+    setShowJiraRuleForm(true)
+  }
+
+  const handleSaveRule = async () => {
+    if (!projectId) return
+    try {
+      const data = {
+        name: ruleName,
+        enabled: editingRule ? editingRule.enabled : true,
+        level_filter: ruleLevelFilter,
+        min_events: parseInt(ruleMinEvents) || 0,
+        min_users: parseInt(ruleMinUsers) || 0,
+        title_pattern: ruleTitlePattern,
+      }
+      if (editingRule) {
+        await api.updateJiraRule(projectId, editingRule.id, data)
+      } else {
+        await api.createJiraRule(projectId, data)
+      }
+      setJiraRules(await api.listJiraRules(projectId))
+      setShowJiraRuleForm(false)
+      toast.success(editingRule ? 'Rule updated' : 'Rule created')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save rule')
+    }
+  }
+
+  const handleToggleRule = async (r: JiraRule) => {
+    if (!projectId) return
+    await api.updateJiraRule(projectId, r.id, {
+      name: r.name, enabled: !r.enabled, level_filter: r.level_filter,
+      min_events: r.min_events, min_users: r.min_users, title_pattern: r.title_pattern,
+    })
+    setJiraRules(await api.listJiraRules(projectId))
+  }
+
+  const handleDeleteRule = async (ruleId: string) => {
+    if (!projectId) return
+    await api.deleteJiraRule(projectId, ruleId)
+    setJiraRules(await api.listJiraRules(projectId))
+    toast.success('Rule deleted')
   }
 
   const handleCopyToken = () => {
@@ -496,6 +611,166 @@ export default function ProjectSettings() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Jira Integration */}
+      {isAdmin && (
+        <Card className="mb-6">
+          <CardHeader><CardTitle className="text-base">Jira Integration</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Jira URL</label>
+                <Input value={jiraBaseUrl} onChange={e => setJiraBaseUrl(e.target.value)} placeholder="https://company.atlassian.net" className="mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Project Key</label>
+                <Input value={jiraProjectKey} onChange={e => setJiraProjectKey(e.target.value)} placeholder="e.g. DEV" className="mt-1" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <Input value={jiraEmail} onChange={e => setJiraEmail(e.target.value)} placeholder="user@company.com" className="mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">API Token</label>
+                <Input type="password" value={jiraApiToken} onChange={e => setJiraApiToken(e.target.value)} placeholder="Jira API token" className="mt-1" />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Issue Type</label>
+              <Select value={jiraIssueType} onChange={e => setJiraIssueType(e.target.value)} className="mt-1">
+                <option value="Bug">Bug</option>
+                <option value="Task">Task</option>
+                <option value="Story">Story</option>
+              </Select>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleSave}>Save</Button>
+              <Button variant="outline" onClick={handleTestJira} disabled={jiraTesting || !jiraBaseUrl}>
+                {jiraTesting ? 'Testing...' : 'Test Connection'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Jira Auto-Creation Rules */}
+      {isAdmin && jiraBaseUrl && (
+        <Card className="mb-6">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Jira Auto-Creation Rules</CardTitle>
+            <Button size="sm" variant="outline" onClick={openAddRule}>
+              <Plus className="h-4 w-4 mr-1" /> Add Rule
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {jiraRules.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <p className="text-sm">No auto-creation rules yet.</p>
+                <p className="text-xs mt-1 text-muted-foreground/60">Add a rule to automatically create Jira tickets when issues match conditions.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {jiraRules.map(r => (
+                  <div key={r.id} className="p-3 border rounded-md">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{r.name}</span>
+                        <button
+                          onClick={() => handleToggleRule(r)}
+                          className={cn(
+                            'text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors',
+                            r.enabled ? 'bg-emerald-500/15 text-emerald-400' : 'bg-muted text-muted-foreground'
+                          )}
+                        >
+                          {r.enabled ? 'Active' : 'Disabled'}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditRule(r)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit rule</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDeleteRule(r.id)}>
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete rule</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
+                      {r.level_filter && <span>Levels: {r.level_filter}</span>}
+                      {r.min_events > 0 && <span>Min events: {r.min_events}</span>}
+                      {r.min_users > 0 && <span>Min users: {r.min_users}</span>}
+                      {r.title_pattern && <span className="font-mono">Pattern: {r.title_pattern}</span>}
+                      {!r.level_filter && r.min_events === 0 && r.min_users === 0 && !r.title_pattern && (
+                        <span>All issues (no conditions)</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Jira Rule Form Dialog */}
+      <Dialog open={showJiraRuleForm} onOpenChange={setShowJiraRuleForm}>
+        <DialogContent>
+          <DialogTitle>{editingRule ? 'Edit Rule' : 'Add Rule'}</DialogTitle>
+          <DialogDescription className="sr-only">Configure Jira auto-creation rule</DialogDescription>
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium">Name</label>
+              <Input value={ruleName} onChange={e => setRuleName(e.target.value)} placeholder="e.g. Critical errors" className="mt-1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Level filter</label>
+              <p className="text-xs text-muted-foreground mb-1">Comma-separated. Empty = all levels.</p>
+              <Input value={ruleLevelFilter} onChange={e => setRuleLevelFilter(e.target.value)} placeholder="e.g. fatal,error" className="mt-1" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Min events</label>
+                <Input type="number" value={ruleMinEvents} onChange={e => setRuleMinEvents(e.target.value)} placeholder="0" className="mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Min users</label>
+                <Input type="number" value={ruleMinUsers} onChange={e => setRuleMinUsers(e.target.value)} placeholder="0" className="mt-1" />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Title pattern</label>
+              <p className="text-xs text-muted-foreground mb-1">Regex or plain text. Empty = match all.</p>
+              <Input value={ruleTitlePattern} onChange={e => setRuleTitlePattern(e.target.value)} placeholder="e.g. database|timeout" className="mt-1" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowJiraRuleForm(false)}>Cancel</Button>
+              <Button onClick={handleSaveRule} disabled={!ruleName.trim()}>{editingRule ? 'Save' : 'Add'}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Rule Confirm */}
+      <ConfirmDialog
+        open={!!showDeleteRule}
+        onOpenChange={open => { if (!open) setShowDeleteRule(null) }}
+        title="Delete Rule"
+        description="This auto-creation rule will be permanently deleted."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => { if (showDeleteRule) handleDeleteRule(showDeleteRule) }}
+      />
 
       {/* Revoke Token Confirm */}
       <ConfirmDialog

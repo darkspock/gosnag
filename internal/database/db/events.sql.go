@@ -156,6 +156,19 @@ func (q *Queries) GetEventTrendByIssues(ctx context.Context, dollar_1 []uuid.UUI
 	return items, nil
 }
 
+const getIssueUserCount = `-- name: GetIssueUserCount :one
+SELECT COUNT(DISTINCT user_identifier)::int as user_count
+FROM events
+WHERE issue_id = $1 AND user_identifier != ''
+`
+
+func (q *Queries) GetIssueUserCount(ctx context.Context, issueID uuid.UUID) (int32, error) {
+	row := q.db.QueryRowContext(ctx, getIssueUserCount, issueID)
+	var user_count int32
+	err := row.Scan(&user_count)
+	return user_count, err
+}
+
 const getUniqueUserCountsByIssues = `-- name: GetUniqueUserCountsByIssues :many
 SELECT issue_id, COUNT(DISTINCT user_identifier)::int as user_count
 FROM events

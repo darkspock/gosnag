@@ -73,6 +73,21 @@ type Issue struct {
 	SnoozeUntil          sql.NullTime   `json:"snooze_until"`
 	SnoozeEventThreshold sql.NullInt32  `json:"snooze_event_threshold"`
 	SnoozeEventsAtStart  int32          `json:"snooze_events_at_start"`
+	JiraTicketKey        sql.NullString `json:"jira_ticket_key"`
+	JiraTicketUrl        sql.NullString `json:"jira_ticket_url"`
+}
+
+type JiraRule struct {
+	ID           uuid.UUID `json:"id"`
+	ProjectID    uuid.UUID `json:"project_id"`
+	Name         string    `json:"name"`
+	Enabled      bool      `json:"enabled"`
+	LevelFilter  string    `json:"level_filter"`
+	MinEvents    int32     `json:"min_events"`
+	MinUsers     int32     `json:"min_users"`
+	TitlePattern string    `json:"title_pattern"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type Project struct {
@@ -83,6 +98,11 @@ type Project struct {
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 	WarningAsError         bool      `json:"warning_as_error"`
+	JiraBaseUrl            string    `json:"jira_base_url"`
+	JiraEmail              string    `json:"jira_email"`
+	JiraApiToken           string    `json:"jira_api_token"`
+	JiraProjectKey         string    `json:"jira_project_key"`
+	JiraIssueType          string    `json:"jira_issue_type"`
 }
 
 type ProjectKey struct {
