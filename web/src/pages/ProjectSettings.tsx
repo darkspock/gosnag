@@ -940,9 +940,13 @@ export default function ProjectSettings() {
                 </Button>
               </div>
               {tokenCopied && <p className="text-xs text-emerald-400">Copied!</p>}
-              <p className="text-xs text-muted-foreground">
-                Use this token as: <code className="text-xs">Authorization: Bearer {newToken.substring(0, 12)}...</code>
-              </p>
+              <div className="mt-2">
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">Example usage:</p>
+                <pre className="bg-muted px-3 py-2 rounded text-xs font-mono break-all whitespace-pre-wrap text-muted-foreground">
+{`curl -H "Authorization: Bearer ${newToken}" \\
+  "${window.location.origin}/api/v1/projects/${projectId}/issues?limit=5"`}
+                </pre>
+              </div>
               <div className="flex justify-end">
                 <Button onClick={() => { setShowTokenForm(false); setNewToken(null) }}>Done</Button>
               </div>
