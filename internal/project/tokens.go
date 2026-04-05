@@ -30,7 +30,7 @@ type TokenResponse struct {
 }
 
 func (h *Handler) ListTokens(w http.ResponseWriter, r *http.Request) {
-	projectID, err := uuid.Parse(chi.URLParam(r, "projectId"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "project_id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid project id")
 		return
@@ -50,7 +50,7 @@ func (h *Handler) ListTokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateToken(w http.ResponseWriter, r *http.Request) {
-	projectID, err := uuid.Parse(chi.URLParam(r, "projectId"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "project_id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid project id")
 		return
@@ -106,7 +106,7 @@ func (h *Handler) CreateToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteToken(w http.ResponseWriter, r *http.Request) {
-	projectID, err := uuid.Parse(chi.URLParam(r, "projectId"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "project_id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid project id")
 		return

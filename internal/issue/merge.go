@@ -100,6 +100,16 @@ func (h *Handler) Merge(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Repoint any existing aliases that pointed to this secondary
+		err = txq.RepointAliases(r.Context(), db.RepointAliasesParams{
+			PrimaryIssueID:   secID,
+			PrimaryIssueID_2: primaryID,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to repoint aliases")
+			return
+		}
+
 		// Register fingerprint alias so future events go to primary
 		err = txq.CreateIssueAlias(r.Context(), db.CreateIssueAliasParams{
 			ProjectID:      projectID,

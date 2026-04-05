@@ -34,8 +34,41 @@ type CreateProjectRequest struct {
 	JiraIssueType          string `json:"jira_issue_type"`
 }
 
+// SafeProject strips sensitive fields (Jira API token) from the project for API responses.
+type SafeProject struct {
+	ID                     uuid.UUID `json:"id"`
+	Name                   string    `json:"name"`
+	Slug                   string    `json:"slug"`
+	DefaultCooldownMinutes int32     `json:"default_cooldown_minutes"`
+	WarningAsError         bool      `json:"warning_as_error"`
+	JiraBaseURL            string    `json:"jira_base_url"`
+	JiraEmail              string    `json:"jira_email"`
+	JiraAPITokenSet        bool      `json:"jira_api_token_set"` // true if configured, never expose the value
+	JiraProjectKey         string    `json:"jira_project_key"`
+	JiraIssueType          string    `json:"jira_issue_type"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
+func toSafeProject(p db.Project) SafeProject {
+	return SafeProject{
+		ID:                     p.ID,
+		Name:                   p.Name,
+		Slug:                   p.Slug,
+		DefaultCooldownMinutes: p.DefaultCooldownMinutes,
+		WarningAsError:         p.WarningAsError,
+		JiraBaseURL:            p.JiraBaseUrl,
+		JiraEmail:              p.JiraEmail,
+		JiraAPITokenSet:        p.JiraApiToken != "",
+		JiraProjectKey:         p.JiraProjectKey,
+		JiraIssueType:          p.JiraIssueType,
+		CreatedAt:              p.CreatedAt,
+		UpdatedAt:              p.UpdatedAt,
+	}
+}
+
 type ProjectResponse struct {
-	db.Project
+	SafeProject
 	DSN string `json:"dsn,omitempty"`
 }
 
@@ -93,11 +126,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dsn := buildDSN(r, key.PublicKey, project.ID)
-	writeJSON(w, http.StatusCreated, ProjectResponse{Project: project, DSN: dsn})
+	writeJSON(w, http.StatusCreated, ProjectResponse{SafeProject: toSafeProject(project), DSN: dsn})
 }
 
 type ProjectListItem struct {
-	db.Project
+	SafeProject
 	TotalIssues    int32   `json:"total_issues"`
 	OpenIssues     int32   `json:"open_issues"`
 	LatestEvent    string  `json:"latest_event,omitempty"`
@@ -151,7 +184,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	result := make([]ProjectListItem, len(projects))
 	for i, p := range projects {
-		item := ProjectListItem{Project: p, Trend: make([]int32, 14)}
+		item := ProjectListItem{SafeProject: toSafeProject(p), Trend: make([]int32, 14)}
 		if s, ok := statsMap[p.ID]; ok {
 			item.TotalIssues = s.TotalIssues
 			item.OpenIssues = s.OpenIssues
@@ -201,7 +234,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		dsn = buildDSN(r, keys[0].PublicKey, project.ID)
 	}
 
-	writeJSON(w, http.StatusOK, ProjectResponse{Project: project, DSN: dsn})
+	writeJSON(w, http.StatusOK, ProjectResponse{SafeProject: toSafeProject(project), DSN: dsn})
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
@@ -232,6 +265,15 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		jiraIssueType = "Bug"
 	}
 
+	// Preserve existing Jira API token if not provided
+	jiraApiToken := req.JiraAPIToken
+	if jiraApiToken == "" {
+		existing, err := h.queries.GetProject(r.Context(), id)
+		if err == nil {
+			jiraApiToken = existing.JiraApiToken
+		}
+	}
+
 	project, err := h.queries.UpdateProject(r.Context(), db.UpdateProjectParams{
 		ID:                     id,
 		Name:                   req.Name,
@@ -240,7 +282,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		WarningAsError:         warningAsError,
 		JiraBaseUrl:            req.JiraBaseURL,
 		JiraEmail:              req.JiraEmail,
-		JiraApiToken:           req.JiraAPIToken,
+		JiraApiToken:           jiraApiToken,
 		JiraProjectKey:         req.JiraProjectKey,
 		JiraIssueType:          jiraIssueType,
 	})
@@ -253,7 +295,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, project)
+	writeJSON(w, http.StatusOK, toSafeProject(project))
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {

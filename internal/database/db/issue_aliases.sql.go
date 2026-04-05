@@ -111,3 +111,17 @@ func (q *Queries) RecalcIssueStats(ctx context.Context, id uuid.UUID) (Issue, er
 	)
 	return i, err
 }
+
+const repointAliases = `-- name: RepointAliases :exec
+UPDATE issue_aliases SET primary_issue_id = $2 WHERE primary_issue_id = $1
+`
+
+type RepointAliasesParams struct {
+	PrimaryIssueID   uuid.UUID `json:"primary_issue_id"`
+	PrimaryIssueID_2 uuid.UUID `json:"primary_issue_id_2"`
+}
+
+func (q *Queries) RepointAliases(ctx context.Context, arg RepointAliasesParams) error {
+	_, err := q.db.ExecContext(ctx, repointAliases, arg.PrimaryIssueID, arg.PrimaryIssueID_2)
+	return err
+}

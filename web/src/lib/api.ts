@@ -131,7 +131,7 @@ export interface Project {
   warning_as_error: boolean
   jira_base_url: string
   jira_email: string
-  jira_api_token: string
+  jira_api_token_set: boolean
   jira_project_key: string
   jira_issue_type: string
   created_at: string

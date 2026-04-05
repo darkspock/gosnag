@@ -11,8 +11,8 @@ RETURNING *;
 
 -- name: UpdateJiraRule :one
 UPDATE jira_rules
-SET name = $2, enabled = $3, level_filter = $4, min_events = $5, min_users = $6, title_pattern = $7, updated_at = now()
-WHERE id = $1
+SET name = $3, enabled = $4, level_filter = $5, min_events = $6, min_users = $7, title_pattern = $8, updated_at = now()
+WHERE id = $1 AND project_id = $2
 RETURNING *;
 
 -- name: DeleteJiraRule :exec

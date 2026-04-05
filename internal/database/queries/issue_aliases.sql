@@ -6,6 +6,9 @@ ON CONFLICT (project_id, fingerprint) DO UPDATE SET primary_issue_id = $3;
 -- name: GetIssueAlias :one
 SELECT * FROM issue_aliases WHERE project_id = $1 AND fingerprint = $2;
 
+-- name: RepointAliases :exec
+UPDATE issue_aliases SET primary_issue_id = $2 WHERE primary_issue_id = $1;
+
 -- name: MoveEventsToIssue :execresult
 UPDATE events SET issue_id = $2 WHERE issue_id = $1;
 

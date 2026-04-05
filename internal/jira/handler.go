@@ -81,6 +81,11 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if issue.ProjectID != projectID {
+		writeError(w, http.StatusBadRequest, "issue does not belong to this project")
+		return
+	}
+
 	if issue.JiraTicketKey.Valid {
 		writeError(w, http.StatusConflict, "issue already has a Jira ticket: "+issue.JiraTicketKey.String)
 		return
@@ -175,6 +180,12 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 
 // UpdateRule updates a Jira rule.
 func (h *Handler) UpdateRule(w http.ResponseWriter, r *http.Request) {
+	projectID, err := uuid.Parse(chi.URLParam(r, "project_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+
 	ruleID, err := uuid.Parse(chi.URLParam(r, "rule_id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid rule id")
@@ -189,6 +200,7 @@ func (h *Handler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 
 	rule, err := h.queries.UpdateJiraRule(r.Context(), db.UpdateJiraRuleParams{
 		ID:           ruleID,
+		ProjectID:    projectID,
 		Name:         req.Name,
 		Enabled:      req.Enabled,
 		LevelFilter:  req.LevelFilter,

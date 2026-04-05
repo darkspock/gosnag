@@ -85,7 +85,7 @@ export default function ProjectSettings() {
         setDefaultCooldown(String(p.default_cooldown_minutes ?? 60))
         setJiraBaseUrl(p.jira_base_url || '')
         setJiraEmail(p.jira_email || '')
-        setJiraApiToken(p.jira_api_token || '')
+        setJiraApiToken(p.jira_api_token_set ? '' : '')
         setJiraProjectKey(p.jira_project_key || '')
         setJiraIssueType(p.jira_issue_type || 'Bug')
       }),
@@ -634,7 +634,7 @@ export default function ProjectSettings() {
               </div>
               <div>
                 <label className="text-sm font-medium">API Token</label>
-                <Input type="password" value={jiraApiToken} onChange={e => setJiraApiToken(e.target.value)} placeholder="Jira API token" className="mt-1" />
+                <Input type="password" value={jiraApiToken} onChange={e => setJiraApiToken(e.target.value)} placeholder={project?.jira_api_token_set ? '••••••••• (configured)' : 'Jira API token'} className="mt-1" />
               </div>
             </div>
             <div>
