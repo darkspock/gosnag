@@ -206,7 +206,7 @@ export default function Projects() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 auto-rows-fr">
           {filteredProjects.map(p => {
             const thisWeek = p.errors_this_week ?? 0
             const lastWeek = p.errors_last_week ?? 0
@@ -215,7 +215,7 @@ export default function Projects() {
 
             return (
               <Link key={p.id} to={`/projects/${p.id}`}>
-                <Card className="transition-all duration-200 cursor-pointer hover:-translate-y-0.5 hover:border-border/80 overflow-hidden">
+                <Card className="h-full flex flex-col transition-all duration-200 cursor-pointer hover:-translate-y-0.5 hover:border-border/80 overflow-hidden">
                   <div className="h-1" style={{ backgroundColor: projectColor(p.name) }} />
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
@@ -238,14 +238,14 @@ export default function Projects() {
                       </button>
                     </div>
                   </CardHeader>
-                  <CardContent className="pt-0 space-y-3">
+                  <CardContent className="pt-0 space-y-3 flex-1 flex flex-col">
                     {/* Sparkline */}
                     <div className="h-10">
                       <ProjectSparkline data={trend} color={projectColor(p.name)} />
                     </div>
 
                     {/* Stats row */}
-                    <div className="grid grid-cols-2 gap-3 pt-1 border-t border-border/40">
+                    <div className="grid grid-cols-2 gap-3 pt-1 border-t border-border/40 mt-auto">
                       <div>
                         <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-0.5">Latest Release</p>
                         <p className="text-sm font-mono truncate">{p.latest_release || '-'}</p>
