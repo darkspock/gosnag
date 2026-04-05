@@ -98,7 +98,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Expand results with tag matches (union with search results)
+	// When tag filter is present, expand results with tag-matched issues and deduplicate
+	var tagAllowed map[uuid.UUID]bool
 	if tagFilter != "" {
 		parts := strings.SplitN(tagFilter, ":", 2)
 		if len(parts) == 2 {
@@ -106,7 +107,11 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 				Key:   parts[0],
 				Value: parts[1],
 			})
-			// Add tag-matched issues that aren't already in the list
+			tagAllowed = make(map[uuid.UUID]bool, len(tagIssueIDs))
+			for _, id := range tagIssueIDs {
+				tagAllowed[id] = true
+			}
+			// Add tag-matched issues not in current page (they matched by tag, not title)
 			existing := make(map[uuid.UUID]bool, len(issues))
 			for _, iss := range issues {
 				existing[iss.ID] = true
@@ -130,6 +135,11 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		LevelFilter:    level,
 		Search:         search,
 	})
+
+	// Adjust count when tag filter adds extra results
+	if tagAllowed != nil {
+		count = int64(len(issues))
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to count issues")
 		return

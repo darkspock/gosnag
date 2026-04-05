@@ -24,10 +24,33 @@ type TagRequest struct {
 	Value string `json:"value"`
 }
 
-func (h *Handler) ListIssueTags(w http.ResponseWriter, r *http.Request) {
+// validateIssueScope checks that the issue exists and belongs to the project in the URL.
+func (h *Handler) validateIssueScope(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	projectID, err := uuid.Parse(chi.URLParam(r, "project_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return uuid.Nil, false
+	}
 	issueID, err := uuid.Parse(chi.URLParam(r, "issue_id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid issue id")
+		return uuid.Nil, false
+	}
+	issue, err := h.queries.GetIssue(r.Context(), issueID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "issue not found")
+		return uuid.Nil, false
+	}
+	if issue.ProjectID != projectID {
+		writeError(w, http.StatusNotFound, "issue not found")
+		return uuid.Nil, false
+	}
+	return issueID, true
+}
+
+func (h *Handler) ListIssueTags(w http.ResponseWriter, r *http.Request) {
+	issueID, ok := h.validateIssueScope(w, r)
+	if !ok {
 		return
 	}
 	tags, err := h.queries.ListIssueTags(r.Context(), issueID)
@@ -39,9 +62,8 @@ func (h *Handler) ListIssueTags(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
-	issueID, err := uuid.Parse(chi.URLParam(r, "issue_id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid issue id")
+	issueID, ok := h.validateIssueScope(w, r)
+	if !ok {
 		return
 	}
 	var req TagRequest
@@ -49,7 +71,7 @@ func (h *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "key and value are required")
 		return
 	}
-	err = h.queries.AddIssueTag(r.Context(), db.AddIssueTagParams{
+	err := h.queries.AddIssueTag(r.Context(), db.AddIssueTagParams{
 		IssueID: issueID,
 		Key:     req.Key,
 		Value:   req.Value,
@@ -62,9 +84,8 @@ func (h *Handler) AddTag(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
-	issueID, err := uuid.Parse(chi.URLParam(r, "issue_id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid issue id")
+	issueID, ok := h.validateIssueScope(w, r)
+	if !ok {
 		return
 	}
 	var req TagRequest
@@ -72,7 +93,7 @@ func (h *Handler) RemoveTag(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "key and value are required")
 		return
 	}
-	err = h.queries.RemoveIssueTag(r.Context(), db.RemoveIssueTagParams{
+	err := h.queries.RemoveIssueTag(r.Context(), db.RemoveIssueTagParams{
 		IssueID: issueID,
 		Key:     req.Key,
 		Value:   req.Value,

@@ -13,12 +13,13 @@ import (
 )
 
 type Handler struct {
-	queries *db.Queries
-	alertFn func(projectID uuid.UUID, issue db.Issue, isNew bool)
+	queries     *db.Queries
+	alertFn     func(projectID uuid.UUID, issue db.Issue, isNew bool)
+	postEventFn func(projectID uuid.UUID, issue db.Issue)
 }
 
-func NewHandler(queries *db.Queries, alertFn func(projectID uuid.UUID, issue db.Issue, isNew bool)) *Handler {
-	return &Handler{queries: queries, alertFn: alertFn}
+func NewHandler(queries *db.Queries, alertFn func(projectID uuid.UUID, issue db.Issue, isNew bool), postEventFn func(projectID uuid.UUID, issue db.Issue)) *Handler {
+	return &Handler{queries: queries, alertFn: alertFn, postEventFn: postEventFn}
 }
 
 // Store handles POST /api/{project_id}/store/ (legacy Sentry endpoint)
@@ -249,6 +250,11 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 	// Alert on new issues (filtering handled by alert service)
 	if isNew && h.alertFn != nil {
 		h.alertFn(projectID, issue, true)
+	}
+
+	// Always run post-event hooks (priority recalc, auto-tags, etc.)
+	if h.postEventFn != nil {
+		h.postEventFn(projectID, issue)
 	}
 }
 

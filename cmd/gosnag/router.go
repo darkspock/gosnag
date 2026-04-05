@@ -71,12 +71,16 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	oauthHandler := auth.NewOAuthHandler(queries, cfg)
 
 	alertService := alert.NewService(queries, cfg)
-	ingestHandler := ingest.NewHandler(queries, func(projectID uuid.UUID, iss db.Issue, isNew bool) {
-		alertService.Notify(projectID, iss, isNew)
-		go jira.CheckAndCreateTicket(context.Background(), queries, cfg.BaseURL, projectID, iss)
-		go priority.Evaluate(context.Background(), queries, projectID, iss)
-		go tags.AutoTag(context.Background(), queries, projectID, iss)
-	})
+	ingestHandler := ingest.NewHandler(queries,
+		func(projectID uuid.UUID, iss db.Issue, isNew bool) {
+			alertService.Notify(projectID, iss, isNew)
+			go jira.CheckAndCreateTicket(context.Background(), queries, cfg.BaseURL, projectID, iss)
+		},
+		func(projectID uuid.UUID, iss db.Issue) {
+			go priority.Evaluate(context.Background(), queries, projectID, iss)
+			go tags.AutoTag(context.Background(), queries, projectID, iss)
+		},
+	)
 
 	r := chi.NewRouter()
 
