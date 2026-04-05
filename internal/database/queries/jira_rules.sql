@@ -21,5 +21,6 @@ DELETE FROM jira_rules WHERE id = $1 AND project_id = $2;
 -- name: ListEnabledJiraRules :many
 SELECT * FROM jira_rules WHERE project_id = $1 AND enabled = true;
 
--- name: UpdateIssueJiraTicket :exec
-UPDATE issues SET jira_ticket_key = $2, jira_ticket_url = $3, updated_at = now() WHERE id = $1;
+-- name: UpdateIssueJiraTicket :execresult
+UPDATE issues SET jira_ticket_key = $2, jira_ticket_url = $3, updated_at = now()
+WHERE id = $1 AND jira_ticket_key IS NULL;

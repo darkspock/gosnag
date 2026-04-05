@@ -104,12 +104,20 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store Jira reference on the issue
-	_ = h.queries.UpdateIssueJiraTicket(r.Context(), db.UpdateIssueJiraTicketParams{
+	// Store Jira reference on the issue (only if not already set — prevents duplicates)
+	res, err := h.queries.UpdateIssueJiraTicket(r.Context(), db.UpdateIssueJiraTicketParams{
 		ID:            issueID,
 		JiraTicketKey: sql.NullString{String: result.Key, Valid: true},
 		JiraTicketUrl: sql.NullString{String: result.URL, Valid: true},
 	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "ticket created in Jira but failed to save reference: "+result.Key)
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		writeError(w, http.StatusConflict, "issue was linked to a Jira ticket concurrently")
+		return
+	}
 
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"key": result.Key,

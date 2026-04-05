@@ -40,6 +40,12 @@ func CheckAndCreateTicket(ctx context.Context, queries *db.Queries, baseURL stri
 
 	for _, rule := range rules {
 		if MatchesRule(rule, issue, userCount) {
+			// Re-check jira_ticket_key right before creating (race condition guard)
+			fresh, err := queries.GetIssue(ctx, issue.ID)
+			if err != nil || fresh.JiraTicketKey.Valid {
+				return
+			}
+
 			summary := "[GoSnag] " + truncate(issue.Title, 200)
 			description := BuildDescription(issue, baseURL, projectID.String(), "")
 
@@ -49,11 +55,19 @@ func CheckAndCreateTicket(ctx context.Context, queries *db.Queries, baseURL stri
 				return
 			}
 
-			_ = queries.UpdateIssueJiraTicket(ctx, db.UpdateIssueJiraTicketParams{
+			res, err := queries.UpdateIssueJiraTicket(ctx, db.UpdateIssueJiraTicketParams{
 				ID:            issue.ID,
 				JiraTicketKey: sql.NullString{String: result.Key, Valid: true},
 				JiraTicketUrl: sql.NullString{String: result.URL, Valid: true},
 			})
+			if err != nil {
+				slog.Error("failed to save Jira ticket reference", "error", err, "key", result.Key, "issue_id", issue.ID)
+				return
+			}
+			if rows, _ := res.RowsAffected(); rows == 0 {
+				slog.Warn("Jira ticket created but issue was linked concurrently", "key", result.Key, "issue_id", issue.ID)
+				return
+			}
 
 			slog.Info("auto-created Jira ticket", "key", result.Key, "issue_id", issue.ID, "rule", rule.Name)
 			return // Only create one ticket per issue

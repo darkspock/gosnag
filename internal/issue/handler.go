@@ -177,31 +177,19 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
-	issueID, err := uuid.Parse(chi.URLParam(r, "issue_id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid issue id")
+	issue, ok := h.getIssueScoped(w, r)
+	if !ok {
 		return
 	}
-
-	issue, err := h.queries.GetIssue(r.Context(), issueID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			writeError(w, http.StatusNotFound, "issue not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to get issue")
-		return
-	}
-
 	writeJSON(w, http.StatusOK, issue)
 }
 
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
-	issueID, err := uuid.Parse(chi.URLParam(r, "issue_id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid issue id")
+	currentIssue, ok := h.getIssueScoped(w, r)
+	if !ok {
 		return
 	}
+	issueID := currentIssue.ID
 
 	var req UpdateIssueRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -213,16 +201,6 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	case "open", "resolved", "reopened", "ignored", "snoozed":
 	default:
 		writeError(w, http.StatusBadRequest, "invalid status")
-		return
-	}
-
-	currentIssue, err := h.queries.GetIssue(r.Context(), issueID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			writeError(w, http.StatusNotFound, "issue not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to get issue")
 		return
 	}
 
@@ -290,11 +268,11 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Assign(w http.ResponseWriter, r *http.Request) {
-	issueID, err := uuid.Parse(chi.URLParam(r, "issue_id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid issue id")
+	scoped, ok := h.getIssueScoped(w, r)
+	if !ok {
 		return
 	}
+	issueID := scoped.ID
 
 	var req AssignIssueRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -425,11 +403,11 @@ func (h *Handler) Counts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
-	issueID, err := uuid.Parse(chi.URLParam(r, "issue_id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid issue id")
+	scoped, ok := h.getIssueScoped(w, r)
+	if !ok {
 		return
 	}
+	issueID := scoped.ID
 
 	limit, _ := strconv.ParseInt(r.URL.Query().Get("limit"), 10, 32)
 	offset, _ := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 32)
@@ -460,6 +438,34 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// getIssueScoped loads an issue by ID and verifies it belongs to the project in the URL.
+func (h *Handler) getIssueScoped(w http.ResponseWriter, r *http.Request) (db.Issue, bool) {
+	projectID, err := uuid.Parse(chi.URLParam(r, "project_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return db.Issue{}, false
+	}
+	issueID, err := uuid.Parse(chi.URLParam(r, "issue_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid issue id")
+		return db.Issue{}, false
+	}
+	issue, err := h.queries.GetIssue(r.Context(), issueID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			writeError(w, http.StatusNotFound, "issue not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "failed to get issue")
+		}
+		return db.Issue{}, false
+	}
+	if issue.ProjectID != projectID {
+		writeError(w, http.StatusNotFound, "issue not found")
+		return db.Issue{}, false
+	}
+	return issue, true
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

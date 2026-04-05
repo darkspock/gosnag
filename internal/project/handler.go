@@ -250,17 +250,31 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cooldown := int32(30)
+	// Load existing project to preserve unset fields
+	existing, err := h.queries.GetProject(r.Context(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to get project")
+		return
+	}
+
+	cooldown := existing.DefaultCooldownMinutes
 	if req.DefaultCooldownMinutes != nil {
 		cooldown = *req.DefaultCooldownMinutes
 	}
 
-	warningAsError := false
+	warningAsError := existing.WarningAsError
 	if req.WarningAsError != nil {
 		warningAsError = *req.WarningAsError
 	}
 
 	jiraIssueType := req.JiraIssueType
+	if jiraIssueType == "" {
+		jiraIssueType = existing.JiraIssueType
+	}
 	if jiraIssueType == "" {
 		jiraIssueType = "Bug"
 	}
@@ -268,10 +282,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	// Preserve existing Jira API token if not provided
 	jiraApiToken := req.JiraAPIToken
 	if jiraApiToken == "" {
-		existing, err := h.queries.GetProject(r.Context(), id)
-		if err == nil {
-			jiraApiToken = existing.JiraApiToken
-		}
+		jiraApiToken = existing.JiraApiToken
 	}
 
 	project, err := h.queries.UpdateProject(r.Context(), db.UpdateProjectParams{

@@ -166,8 +166,9 @@ func (q *Queries) ListJiraRules(ctx context.Context, projectID uuid.UUID) ([]Jir
 	return items, nil
 }
 
-const updateIssueJiraTicket = `-- name: UpdateIssueJiraTicket :exec
-UPDATE issues SET jira_ticket_key = $2, jira_ticket_url = $3, updated_at = now() WHERE id = $1
+const updateIssueJiraTicket = `-- name: UpdateIssueJiraTicket :execresult
+UPDATE issues SET jira_ticket_key = $2, jira_ticket_url = $3, updated_at = now()
+WHERE id = $1 AND jira_ticket_key IS NULL
 `
 
 type UpdateIssueJiraTicketParams struct {
@@ -176,9 +177,8 @@ type UpdateIssueJiraTicketParams struct {
 	JiraTicketUrl sql.NullString `json:"jira_ticket_url"`
 }
 
-func (q *Queries) UpdateIssueJiraTicket(ctx context.Context, arg UpdateIssueJiraTicketParams) error {
-	_, err := q.db.ExecContext(ctx, updateIssueJiraTicket, arg.ID, arg.JiraTicketKey, arg.JiraTicketUrl)
-	return err
+func (q *Queries) UpdateIssueJiraTicket(ctx context.Context, arg UpdateIssueJiraTicketParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, updateIssueJiraTicket, arg.ID, arg.JiraTicketKey, arg.JiraTicketUrl)
 }
 
 const updateJiraRule = `-- name: UpdateJiraRule :one
