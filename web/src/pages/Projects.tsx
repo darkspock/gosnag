@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api, type Project, type ProjectGroup } from '@/lib/api'
 import { useAuth } from '@/lib/use-auth'
 import { Button } from '@/components/ui/button'
@@ -34,7 +34,12 @@ export default function Projects() {
   const { user } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [groups, setGroups] = useState<ProjectGroup[]>([])
-  const [activeGroup, setActiveGroup] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeGroup = searchParams.get('group')
+  const setActiveGroup = (id: string | null) => {
+    if (id) setSearchParams({ group: id })
+    else setSearchParams({})
+  }
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
   const [showCreate, setShowCreate] = useState(false)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
