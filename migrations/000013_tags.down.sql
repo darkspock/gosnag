@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS tag_rules;
+DROP TABLE IF EXISTS issue_tags;

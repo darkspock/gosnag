@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, type ProjectWithDSN, type AlertConfig, type APIToken, type JiraRule, type ProjectGroup, type PriorityRule } from '@/lib/api'
+import { api, type ProjectWithDSN, type AlertConfig, type APIToken, type JiraRule, type ProjectGroup, type PriorityRule, type TagRule } from '@/lib/api'
 import { useAuth } from '@/lib/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
-import { Bell, Copy, Gauge, Key, Pencil, Plus, Settings, ShieldAlert, Trash2, Workflow } from 'lucide-react'
+import { Bell, Copy, Gauge, Key, Pencil, Plus, Settings, ShieldAlert, Tag, Trash2, Workflow } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
 
@@ -24,7 +24,7 @@ const LEVEL_COLORS: Record<string, string> = {
   debug: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
 }
 
-type SettingsSection = 'general' | 'alerts' | 'tokens' | 'priority' | 'integrations' | 'danger'
+type SettingsSection = 'general' | 'alerts' | 'tokens' | 'priority' | 'tags' | 'integrations' | 'danger'
 
 export default function ProjectSettings() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -68,6 +68,14 @@ export default function ProjectSettings() {
   const [prPoints, setPrPoints] = useState('')
   const [showDeletePriorityRule, setShowDeletePriorityRule] = useState<string | null>(null)
   const [recalcing, setRecalcing] = useState(false)
+  const [tagRules, setTagRules] = useState<TagRule[]>([])
+  const [showTagRuleForm, setShowTagRuleForm] = useState(false)
+  const [editingTagRule, setEditingTagRule] = useState<TagRule | null>(null)
+  const [trName, setTrName] = useState('')
+  const [trPattern, setTrPattern] = useState('')
+  const [trTagKey, setTrTagKey] = useState('')
+  const [trTagValue, setTrTagValue] = useState('')
+  const [showDeleteTagRule, setShowDeleteTagRule] = useState<string | null>(null)
   const [allGroups, setAllGroups] = useState<ProjectGroup[]>([])
   const [selectedGroupId, setSelectedGroupId] = useState<string>('')
   const [name, setName] = useState('')
@@ -136,6 +144,7 @@ export default function ProjectSettings() {
       api.listJiraRules(projectId).then(setJiraRules),
       api.listGroups().then(setAllGroups),
       api.listPriorityRules(projectId).then(setPriorityRules),
+      api.listTagRules(projectId).then(setTagRules),
     ]).finally(() => setLoading(false))
   }, [projectId])
 
@@ -465,6 +474,37 @@ export default function ProjectSettings() {
 
   const currentRuleType = RULE_TYPES.find(t => t.value === prRuleType)
 
+  const openAddTagRule = () => {
+    setEditingTagRule(null); setTrName(''); setTrPattern(''); setTrTagKey(''); setTrTagValue('')
+    setShowTagRuleForm(true)
+  }
+  const openEditTagRule = (r: TagRule) => {
+    setEditingTagRule(r); setTrName(r.name); setTrPattern(r.pattern); setTrTagKey(r.tag_key); setTrTagValue(r.tag_value)
+    setShowTagRuleForm(true)
+  }
+  const handleSaveTagRule = async () => {
+    if (!projectId) return
+    const data = { name: trName, pattern: trPattern, tag_key: trTagKey, tag_value: trTagValue, enabled: editingTagRule ? editingTagRule.enabled : true }
+    try {
+      if (editingTagRule) await api.updateTagRule(projectId, editingTagRule.id, data)
+      else await api.createTagRule(projectId, data)
+      setTagRules(await api.listTagRules(projectId))
+      setShowTagRuleForm(false)
+      toast.success(editingTagRule ? 'Rule updated' : 'Rule created')
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Failed to save rule') }
+  }
+  const handleToggleTagRule = async (r: TagRule) => {
+    if (!projectId) return
+    await api.updateTagRule(projectId, r.id, { ...r, enabled: !r.enabled })
+    setTagRules(await api.listTagRules(projectId))
+  }
+  const handleDeleteTagRule = async (ruleId: string) => {
+    if (!projectId) return
+    await api.deleteTagRule(projectId, ruleId)
+    setTagRules(await api.listTagRules(projectId))
+    toast.success('Rule deleted')
+  }
+
   const handleCopyToken = () => {
     if (newToken) {
       navigator.clipboard.writeText(newToken)
@@ -512,6 +552,12 @@ export default function ProjectSettings() {
       label: 'Priority',
       badge: `${priorityRules.length}`,
       icon: Gauge,
+    },
+    {
+      id: 'tags' as const,
+      label: 'Tags',
+      badge: `${tagRules.length}`,
+      icon: Tag,
     },
     ...(isAdmin
       ? [
@@ -1044,6 +1090,104 @@ export default function ProjectSettings() {
                 confirmLabel="Delete"
                 variant="destructive"
                 onConfirm={() => { if (showDeletePriorityRule) handleDeletePriorityRule(showDeletePriorityRule) }}
+              />
+            </>
+          )}
+
+          {activeSection === 'tags' && (
+            <>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Tags</p>
+                <h2 className="text-xl font-semibold">Auto-tagging rules</h2>
+                <p className="text-sm text-muted-foreground">
+                  Define rules to automatically tag issues based on their title. Search issues by tag using <code className="text-xs">key:value</code> in the search box.
+                </p>
+              </div>
+
+              <Card>
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle className="text-base">Rules</CardTitle>
+                  {isAdmin && (
+                    <Button size="sm" variant="outline" onClick={openAddTagRule}>
+                      <Plus className="h-4 w-4 mr-1" /> Add Rule
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  {tagRules.length === 0 ? (
+                    <div className="py-8 text-center text-muted-foreground">
+                      <p className="text-sm">No tag rules configured.</p>
+                      <p className="mt-1 text-xs text-muted-foreground/60">Tags can still be added manually on each issue.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {tagRules.map(r => (
+                        <div key={r.id} className="rounded-md border p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{r.name}</span>
+                              <button onClick={() => handleToggleTagRule(r)} className={cn('text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors', r.enabled ? 'bg-emerald-500/15 text-emerald-400' : 'bg-muted text-muted-foreground')}>
+                                {r.enabled ? 'Active' : 'Disabled'}
+                              </button>
+                              <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary/80">
+                                {r.tag_key}:{r.tag_value}
+                              </span>
+                            </div>
+                            {isAdmin && (
+                              <div className="flex items-center gap-1">
+                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditTagRule(r)}><Pencil className="h-3.5 w-3.5" /></Button></TooltipTrigger><TooltipContent>Edit rule</TooltipContent></Tooltip>
+                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowDeleteTagRule(r.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button></TooltipTrigger><TooltipContent>Delete rule</TooltipContent></Tooltip>
+                              </div>
+                            )}
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground font-mono">pattern: {r.pattern}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Dialog open={showTagRuleForm} onOpenChange={setShowTagRuleForm}>
+                <DialogContent>
+                  <DialogTitle>{editingTagRule ? 'Edit Rule' : 'Add Rule'}</DialogTitle>
+                  <DialogDescription className="sr-only">Configure auto-tagging rule</DialogDescription>
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <label className="text-sm font-medium">Name</label>
+                      <Input value={trName} onChange={e => setTrName(e.target.value)} placeholder="e.g. Payment errors" className="mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Title pattern</label>
+                      <Input value={trPattern} onChange={e => setTrPattern(e.target.value)} placeholder="e.g. Adyen|Stripe|payment" className="mt-1" />
+                      <p className="mt-1 text-xs text-muted-foreground">Plain text = contains match. Supports regex.</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium">Tag key</label>
+                        <Input value={trTagKey} onChange={e => setTrTagKey(e.target.value)} placeholder="e.g. team" className="mt-1" />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Tag value</label>
+                        <Input value={trTagValue} onChange={e => setTrTagValue(e.target.value)} placeholder="e.g. payment" className="mt-1" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setShowTagRuleForm(false)}>Cancel</Button>
+                      <Button onClick={handleSaveTagRule} disabled={!trName || !trPattern || !trTagKey || !trTagValue}>{editingTagRule ? 'Save' : 'Add'}</Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <ConfirmDialog
+                open={!!showDeleteTagRule}
+                onOpenChange={open => { if (!open) setShowDeleteTagRule(null) }}
+                title="Delete Rule"
+                description="This tag rule will be permanently deleted."
+                confirmLabel="Delete"
+                variant="destructive"
+                onConfirm={() => { if (showDeleteTagRule) handleDeleteTagRule(showDeleteTagRule) }}
               />
             </>
           )}

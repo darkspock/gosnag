@@ -49,7 +49,7 @@ export const api = {
     request<void>(`/projects/${id}`, { method: 'DELETE' }),
 
   // Issues
-  listIssues: (projectId: string, params?: { status?: string; level?: string; limit?: number; offset?: number; today?: boolean; assigned_to?: string; assigned_any?: boolean; search?: string }) => {
+  listIssues: (projectId: string, params?: { status?: string; level?: string; limit?: number; offset?: number; today?: boolean; assigned_to?: string; assigned_any?: boolean; search?: string; tag?: string }) => {
     const q = new URLSearchParams()
     if (params?.status) q.set('status', params.status)
     if (params?.level) q.set('level', params.level)
@@ -59,6 +59,7 @@ export const api = {
     if (params?.assigned_to) q.set('assigned_to', params.assigned_to)
     if (params?.assigned_any) q.set('assigned_any', 'true')
     if (params?.search) q.set('search', params.search)
+    if (params?.tag) q.set('tag', params.tag)
     return request<IssueListResponse>(`/projects/${projectId}/issues?${q}`)
   },
   getIssueCounts: (projectId: string, params?: { level?: string }) => {
@@ -110,6 +111,21 @@ export const api = {
     request<void>(`/projects/${projectId}/priority-rules/${ruleId}`, { method: 'DELETE' }),
   recalcPriority: (projectId: string) =>
     request<{ recalculated: number }>(`/projects/${projectId}/priority-rules/recalc`, { method: 'POST' }),
+
+  // Tags
+  listIssueTags: (projectId: string, issueId: string) => request<IssueTag[]>(`/projects/${projectId}/issues/${issueId}/tags`),
+  addIssueTag: (projectId: string, issueId: string, key: string, value: string) =>
+    request<void>(`/projects/${projectId}/issues/${issueId}/tags`, { method: 'POST', body: JSON.stringify({ key, value }) }),
+  removeIssueTag: (projectId: string, issueId: string, key: string, value: string) =>
+    request<void>(`/projects/${projectId}/issues/${issueId}/tags`, { method: 'DELETE', body: JSON.stringify({ key, value }) }),
+  listDistinctTags: (projectId: string) => request<{ key: string; value: string }[]>(`/projects/${projectId}/tags`),
+  listTagRules: (projectId: string) => request<TagRule[]>(`/projects/${projectId}/tag-rules`),
+  createTagRule: (projectId: string, data: { name: string; pattern: string; tag_key: string; tag_value: string; enabled: boolean }) =>
+    request<TagRule>(`/projects/${projectId}/tag-rules`, { method: 'POST', body: JSON.stringify(data) }),
+  updateTagRule: (projectId: string, ruleId: string, data: { name: string; pattern: string; tag_key: string; tag_value: string; enabled: boolean }) =>
+    request<TagRule>(`/projects/${projectId}/tag-rules/${ruleId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteTagRule: (projectId: string, ruleId: string) =>
+    request<void>(`/projects/${projectId}/tag-rules/${ruleId}`, { method: 'DELETE' }),
 
   // Jira
   testJiraConnection: (projectId: string) =>
@@ -199,6 +215,7 @@ export interface Issue {
   jira_ticket_key: string | null
   jira_ticket_url: string | null
   priority: number
+  tags?: IssueTag[]
   user_count?: number
   trend?: number[]
 }
@@ -249,6 +266,23 @@ export interface APIToken {
   last_used_at: string | null
   expires_at: string | null
   created_at: string
+}
+
+export interface IssueTag {
+  key: string
+  value: string
+}
+
+export interface TagRule {
+  id: string
+  project_id: string
+  name: string
+  pattern: string
+  tag_key: string
+  tag_value: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface PriorityRule {

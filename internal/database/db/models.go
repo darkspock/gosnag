@@ -86,6 +86,14 @@ type IssueAlias struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
+type IssueTag struct {
+	ID        uuid.UUID `json:"id"`
+	IssueID   uuid.UUID `json:"issue_id"`
+	Key       string    `json:"key"`
+	Value     string    `json:"value"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type JiraRule struct {
 	ID           uuid.UUID `json:"id"`
 	ProjectID    uuid.UUID `json:"project_id"`
@@ -157,6 +165,18 @@ type Session struct {
 	UserID    uuid.UUID `json:"user_id"`
 	ExpiresAt time.Time `json:"expires_at"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type TagRule struct {
+	ID        uuid.UUID `json:"id"`
+	ProjectID uuid.UUID `json:"project_id"`
+	Name      string    `json:"name"`
+	Pattern   string    `json:"pattern"`
+	TagKey    string    `json:"tag_key"`
+	TagValue  string    `json:"tag_value"`
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type User struct {

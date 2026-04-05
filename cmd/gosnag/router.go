@@ -18,6 +18,7 @@ import (
 	"github.com/darkspock/gosnag/internal/jira"
 	"github.com/darkspock/gosnag/internal/priority"
 	"github.com/darkspock/gosnag/internal/project"
+	"github.com/darkspock/gosnag/internal/tags"
 	"github.com/darkspock/gosnag/internal/user"
 	"github.com/darkspock/gosnag/web"
 	"github.com/go-chi/chi/v5"
@@ -66,6 +67,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	alertHandler := alert.NewHandler(queries)
 	jiraHandler := jira.NewHandler(queries, cfg)
 	priorityHandler := priority.NewHandler(queries)
+	tagsHandler := tags.NewHandler(queries)
 	oauthHandler := auth.NewOAuthHandler(queries, cfg)
 
 	alertService := alert.NewService(queries, cfg)
@@ -73,6 +75,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 		alertService.Notify(projectID, iss, isNew)
 		go jira.CheckAndCreateTicket(context.Background(), queries, cfg.BaseURL, projectID, iss)
 		go priority.Evaluate(context.Background(), queries, projectID, iss)
+		go tags.AutoTag(context.Background(), queries, projectID, iss)
 	})
 
 	r := chi.NewRouter()
@@ -149,6 +152,15 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 					r.With(auth.RequireAdmin).Post("/recalc", priorityHandler.RecalcAll)
 				})
 
+				// Tag rules per project
+				r.Route("/tag-rules", func(r chi.Router) {
+					r.Get("/", tagsHandler.ListRules)
+					r.With(auth.RequireAdmin).Post("/", tagsHandler.CreateRule)
+					r.With(auth.RequireAdmin).Put("/{rule_id}", tagsHandler.UpdateRule)
+					r.With(auth.RequireAdmin).Delete("/{rule_id}", tagsHandler.DeleteRule)
+				})
+				r.Get("/tags", tagsHandler.ListDistinctTags)
+
 				// Alerts per project
 				r.Route("/alerts", func(r chi.Router) {
 					r.Get("/", alertHandler.List)
@@ -170,6 +182,9 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 				r.With(auth.RequireWritePermission).Put("/", issueHandler.UpdateStatus)
 				r.With(auth.RequireWritePermission).Put("/assign", issueHandler.Assign)
 				r.Get("/events", issueHandler.ListEvents)
+				r.Get("/tags", tagsHandler.ListIssueTags)
+				r.With(auth.RequireWritePermission).Post("/tags", tagsHandler.AddTag)
+				r.With(auth.RequireWritePermission).Delete("/tags", tagsHandler.RemoveTag)
 				r.With(auth.RequireWritePermission).Post("/jira", jiraHandler.CreateTicket)
 			})
 		})

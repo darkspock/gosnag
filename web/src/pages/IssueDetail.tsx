@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, type Issue, type Event, type User, type Project } from '@/lib/api'
+import { api, type Issue, type Event, type User, type Project, type IssueTag } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,7 +8,8 @@ import { Select } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { Check, X, EyeOff, RotateCcw, ChevronDown, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink } from 'lucide-react'
+import { Check, X, EyeOff, RotateCcw, ChevronDown, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink, Plus } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -33,6 +34,8 @@ export default function IssueDetail() {
   const [eventTotal, setEventTotal] = useState(0)
   const [showDelete, setShowDelete] = useState(false)
   const [creatingJira, setCreatingJira] = useState(false)
+  const [issueTags, setIssueTags] = useState<IssueTag[]>([])
+  const [tagInput, setTagInput] = useState('')
   const eventLimit = 25
 
   useEffect(() => {
@@ -45,6 +48,7 @@ export default function IssueDetail() {
         setEventTotal(r.total)
       }),
       api.listUsers().then(setUsers),
+      api.listIssueTags(projectId, issueId).then(setIssueTags),
     ]).finally(() => setLoading(false))
   }, [projectId, issueId])
 
@@ -55,6 +59,22 @@ export default function IssueDetail() {
       setEventTotal(r.total)
     })
   }, [projectId, issueId, eventOffset])
+
+  const handleAddTag = async () => {
+    if (!projectId || !issueId || !tagInput.includes(':')) return
+    const [key, ...rest] = tagInput.split(':')
+    const value = rest.join(':')
+    if (!key || !value) return
+    await api.addIssueTag(projectId, issueId, key.trim(), value.trim())
+    setIssueTags(await api.listIssueTags(projectId, issueId))
+    setTagInput('')
+  }
+
+  const handleRemoveTag = async (key: string, value: string) => {
+    if (!projectId || !issueId) return
+    await api.removeIssueTag(projectId, issueId, key, value)
+    setIssueTags(await api.listIssueTags(projectId, issueId))
+  }
 
   const handleCreateJiraTicket = async () => {
     if (!projectId || !issueId) return
@@ -187,6 +207,29 @@ export default function IssueDetail() {
               <span className="mx-1.5 opacity-40">&middot;</span>
               <span className="font-mono text-xs">{issue.platform}</span>
             </span>
+          </div>
+
+          {/* Tags */}
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            {issueTags.map(t => (
+              <span key={`${t.key}:${t.value}`} className="inline-flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded bg-primary/10 text-primary/80">
+                {t.key}:{t.value}
+                <button onClick={() => handleRemoveTag(t.key, t.value)} className="hover:text-destructive">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            <form onSubmit={e => { e.preventDefault(); handleAddTag() }} className="inline-flex items-center gap-1">
+              <Input
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                placeholder="key:value"
+                className="h-6 w-28 text-xs px-2 py-0"
+              />
+              <button type="submit" disabled={!tagInput.includes(':')} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </form>
           </div>
         </div>
 

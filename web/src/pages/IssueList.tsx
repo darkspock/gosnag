@@ -148,7 +148,13 @@ export default function IssueList() {
     if (activeFilter === 'today') params.today = true
     if (activeFilter === 'assigned_to_me') params.assigned_to = 'me'
     if (activeFilter === 'assigned_any') params.assigned_any = true
-    if (searchQuery) params.search = searchQuery
+    if (searchQuery) {
+      params.search = searchQuery
+      // Also search by tag if it looks like key:value
+      if (/^[^\s:]+:[^\s:]+$/.test(searchQuery)) {
+        params.tag = searchQuery
+      }
+    }
     api.listIssues(projectId, params)
       .then(res => {
         setFetchedAt(Date.now())
@@ -474,6 +480,15 @@ export default function IssueList() {
                       )}
                     </div>
                     <p className="font-medium truncate">{issue.title}</p>
+                    {issue.tags && issue.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {issue.tags.map(t => (
+                          <span key={`${t.key}:${t.value}`} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary/80">
+                            {t.key}:{t.value}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-sm text-muted-foreground">
                       <span className="font-mono text-xs">{issue.platform}</span>
                       <span className="mx-1.5 opacity-40">&middot;</span>

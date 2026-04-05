@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,10 +41,16 @@ type AssignIssueRequest struct {
 	AssignedTo *string `json:"assigned_to"`
 }
 
+type IssueTag struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 type IssueWithStats struct {
 	db.Issue
-	UserCount int32   `json:"user_count"`
-	Trend     []int32 `json:"trend"`
+	UserCount int32      `json:"user_count"`
+	Trend     []int32    `json:"trend"`
+	Tags      []IssueTag `json:"tags"`
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +64,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	status := q.Get("status")
 	level := q.Get("level")
 	search := q.Get("search")
+	tagFilter := q.Get("tag") // format: key:value
 	limit, _ := strconv.ParseInt(q.Get("limit"), 10, 32)
 	offset, _ := strconv.ParseInt(q.Get("offset"), 10, 32)
 	todayOnly := q.Get("today") == "true"
@@ -90,6 +98,29 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Expand results with tag matches (union with search results)
+	if tagFilter != "" {
+		parts := strings.SplitN(tagFilter, ":", 2)
+		if len(parts) == 2 {
+			tagIssueIDs, _ := h.queries.ListIssueIDsByTag(r.Context(), db.ListIssueIDsByTagParams{
+				Key:   parts[0],
+				Value: parts[1],
+			})
+			// Add tag-matched issues that aren't already in the list
+			existing := make(map[uuid.UUID]bool, len(issues))
+			for _, iss := range issues {
+				existing[iss.ID] = true
+			}
+			for _, id := range tagIssueIDs {
+				if !existing[id] {
+					if iss, err := h.queries.GetIssue(r.Context(), id); err == nil && iss.ProjectID == projectID {
+						issues = append(issues, iss)
+					}
+				}
+			}
+		}
+	}
+
 	count, err := h.queries.CountIssuesByProject(r.Context(), db.CountIssuesByProjectParams{
 		ProjectID:      projectID,
 		Column2:        status,
@@ -118,8 +149,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 		var userCounts []db.GetUniqueUserCountsByIssuesRow
 		var trendRows []db.GetEventTrendByIssuesRow
+		var tagRows []db.IssueTag
 		var wg sync.WaitGroup
-		wg.Add(2)
+		wg.Add(3)
 		go func() {
 			defer wg.Done()
 			var err error
@@ -134,6 +166,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			trendRows, err = h.queries.GetEventTrendByIssues(r.Context(), ids)
 			if err != nil {
 				slog.Error("failed to get event trends", "error", err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			var err error
+			tagRows, err = h.queries.ListTagsByIssueIDs(r.Context(), ids)
+			if err != nil {
+				slog.Error("failed to get issue tags", "error", err)
 			}
 		}()
 		wg.Wait()
@@ -158,12 +198,22 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			trendMap[tr.IssueID][23-hoursAgo] = tr.Count
 		}
 
+		// Map tags
+		tagMap := map[uuid.UUID][]IssueTag{}
+		for _, t := range tagRows {
+			tagMap[t.IssueID] = append(tagMap[t.IssueID], IssueTag{Key: t.Key, Value: t.Value})
+		}
+
 		for i := range enriched {
 			enriched[i].UserCount = ucMap[enriched[i].ID]
 			if t, ok := trendMap[enriched[i].ID]; ok {
 				enriched[i].Trend = t
 			} else {
 				enriched[i].Trend = make([]int32, 24)
+			}
+			enriched[i].Tags = tagMap[enriched[i].ID]
+			if enriched[i].Tags == nil {
+				enriched[i].Tags = []IssueTag{}
 			}
 		}
 	}
@@ -174,6 +224,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		m := issueJSON(e.Issue)
 		m["user_count"] = e.UserCount
 		m["trend"] = e.Trend
+		m["tags"] = e.Tags
 		safeIssues[i] = m
 	}
 
