@@ -180,10 +180,17 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 			path = "index.html"
 		}
 		if _, err := fs.Stat(distFS, path); err == nil {
+			// Hashed assets (js/css) get long cache; index.html gets no-cache
+			if strings.HasPrefix(path, "assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			}
 			fileServer.ServeHTTP(w, r)
 			return
 		}
 		// SPA fallback: serve index.html for client-side routes
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		r.URL.Path = "/"
 		fileServer.ServeHTTP(w, r)
 	})
