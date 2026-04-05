@@ -573,13 +573,17 @@ export default function IssueList() {
         open={showBulkDelete}
         onOpenChange={setShowBulkDelete}
         title="Delete Issues"
-        description={`Delete ${issues.length} issues on this page and all their events? This action cannot be undone.`}
-        confirmLabel="Delete All"
+        description={selectedIds.size > 0
+          ? `Delete ${selectedIds.size} selected issue(s) and all their events? This action cannot be undone.`
+          : `Delete ${issues.length} issues on this page and all their events? This action cannot be undone.`}
+        confirmLabel={selectedIds.size > 0 ? `Delete ${selectedIds.size} Selected` : 'Delete All'}
         variant="destructive"
         onConfirm={async () => {
           if (!projectId) return
-          const result = await api.deleteIssues(projectId, issues.map(i => i.id))
+          const ids = selectedIds.size > 0 ? [...selectedIds] : issues.map(i => i.id)
+          const result = await api.deleteIssues(projectId, ids)
           toast.success(`${result.deleted} issues deleted`)
+          setSelectedIds(new Set())
           setRefreshKey(k => k + 1)
         }}
       />
