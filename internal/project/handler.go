@@ -47,9 +47,17 @@ type SafeProject struct {
 	JiraAPITokenSet        bool      `json:"jira_api_token_set"` // true if configured, never expose the value
 	JiraProjectKey         string    `json:"jira_project_key"`
 	JiraIssueType          string        `json:"jira_issue_type"`
-	GroupID                uuid.NullUUID `json:"group_id"`
+	GroupID                *string       `json:"group_id"`
 	CreatedAt              time.Time     `json:"created_at"`
 	UpdatedAt              time.Time     `json:"updated_at"`
+}
+
+func nullUUIDToStringPtr(u uuid.NullUUID) *string {
+	if !u.Valid {
+		return nil
+	}
+	s := u.UUID.String()
+	return &s
 }
 
 func toSafeProject(p db.Project) SafeProject {
@@ -64,7 +72,7 @@ func toSafeProject(p db.Project) SafeProject {
 		JiraAPITokenSet:        p.JiraApiToken != "",
 		JiraProjectKey:         p.JiraProjectKey,
 		JiraIssueType:          p.JiraIssueType,
-		GroupID:                p.GroupID,
+		GroupID:                nullUUIDToStringPtr(p.GroupID),
 		CreatedAt:              p.CreatedAt,
 		UpdatedAt:              p.UpdatedAt,
 	}
