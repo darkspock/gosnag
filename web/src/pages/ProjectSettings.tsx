@@ -488,6 +488,16 @@ export default function ProjectSettings() {
 
               <Card>
                 <CardHeader>
+                  <CardTitle className="text-base">Project ID</CardTitle>
+                  <CardDescription>Use this ID when calling the API with a Bearer token.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <code className="rounded bg-muted px-3 py-2 text-sm font-mono break-all block">{projectId}</code>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
                   <CardTitle className="text-base">DSN (Client Key)</CardTitle>
                   <CardDescription>Use this DSN in your Sentry SDK configuration. This value is read-only.</CardDescription>
                 </CardHeader>
