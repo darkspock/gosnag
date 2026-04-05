@@ -114,6 +114,12 @@ type Project struct {
 	GroupID                uuid.NullUUID `json:"group_id"`
 }
 
+type ProjectFavorite struct {
+	UserID    uuid.UUID `json:"user_id"`
+	ProjectID uuid.UUID `json:"project_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type ProjectGroup struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`

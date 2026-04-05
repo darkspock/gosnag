@@ -107,6 +107,11 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 			r.With(auth.RequireAdmin).Delete("/{group_id}", projectHandler.DeleteGroup)
 		})
 
+		// Favorites
+		r.Get("/favorites", projectHandler.ListFavorites)
+		r.Put("/projects/{project_id}/favorite", projectHandler.AddFavorite)
+		r.Delete("/projects/{project_id}/favorite", projectHandler.RemoveFavorite)
+
 		// Projects
 		r.Route("/projects", func(r chi.Router) {
 			r.Get("/", projectHandler.List)

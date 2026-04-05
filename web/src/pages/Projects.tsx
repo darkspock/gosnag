@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ProjectCardsSkeleton } from '@/components/ui/skeleton'
-import { Plus, FolderOpen, TrendingUp, TrendingDown, Minus, X, Pencil } from 'lucide-react'
+import { Plus, FolderOpen, TrendingUp, TrendingDown, Minus, X, Pencil, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
 
@@ -35,6 +35,7 @@ export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [groups, setGroups] = useState<ProjectGroup[]>([])
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
   const [showCreate, setShowCreate] = useState(false)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [editingGroup, setEditingGroup] = useState<ProjectGroup | null>(null)
@@ -46,12 +47,32 @@ export default function Projects() {
     Promise.all([
       api.listProjects().then(setProjects),
       api.listGroups().then(setGroups),
+      api.listFavorites().then(ids => setFavoriteIds(new Set(ids))),
     ]).finally(() => setLoading(false))
   }, [])
 
-  const filteredProjects = activeGroup
+  const toggleFavorite = async (projectId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const next = new Set(favoriteIds)
+    if (next.has(projectId)) {
+      next.delete(projectId)
+      await api.removeFavorite(projectId)
+    } else {
+      next.add(projectId)
+      await api.addFavorite(projectId)
+    }
+    setFavoriteIds(next)
+  }
+
+  const filteredProjects = (activeGroup
     ? projects.filter(p => p.group_id === activeGroup)
     : projects
+  ).sort((a, b) => {
+    const aFav = favoriteIds.has(a.id) ? 0 : 1
+    const bFav = favoriteIds.has(b.id) ? 0 : 1
+    return aFav - bFav
+  })
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) return
@@ -197,8 +218,25 @@ export default function Projects() {
                 <Card className="transition-all duration-200 cursor-pointer hover:-translate-y-0.5 hover:border-border/80 overflow-hidden">
                   <div className="h-1" style={{ backgroundColor: projectColor(p.name) }} />
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">{p.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground font-mono">{p.slug}</p>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-lg">{p.name}</CardTitle>
+                        <p className="text-sm text-muted-foreground font-mono">{p.slug}</p>
+                      </div>
+                      <button
+                        onClick={(e) => toggleFavorite(p.id, e)}
+                        className="p-1 -mr-1 -mt-1 transition-colors"
+                      >
+                        <Star
+                          className={cn(
+                            'h-4 w-4',
+                            favoriteIds.has(p.id)
+                              ? 'fill-amber-400 text-amber-400'
+                              : 'text-muted-foreground/30 hover:text-muted-foreground'
+                          )}
+                        />
+                      </button>
+                    </div>
                   </CardHeader>
                   <CardContent className="pt-0 space-y-3">
                     {/* Sparkline */}

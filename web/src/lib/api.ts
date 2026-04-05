@@ -33,6 +33,11 @@ export const api = {
   updateGroup: (id: string, name: string) => request<ProjectGroup>(`/groups/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   deleteGroup: (id: string) => request<void>(`/groups/${id}`, { method: 'DELETE' }),
 
+  // Favorites
+  listFavorites: () => request<string[]>('/favorites'),
+  addFavorite: (projectId: string) => request<void>(`/projects/${projectId}/favorite`, { method: 'PUT' }),
+  removeFavorite: (projectId: string) => request<void>(`/projects/${projectId}/favorite`, { method: 'DELETE' }),
+
   // Projects
   listProjects: () => request<Project[]>('/projects'),
   getProject: (id: string) => request<ProjectWithDSN>(`/projects/${id}`),
