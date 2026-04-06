@@ -13,15 +13,18 @@ import (
 )
 
 type AlertConfig struct {
-	ID           uuid.UUID       `json:"id"`
-	ProjectID    uuid.UUID       `json:"project_id"`
-	AlertType    string          `json:"alert_type"`
-	Config       json.RawMessage `json:"config"`
-	Enabled      bool            `json:"enabled"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
-	LevelFilter  string          `json:"level_filter"`
-	TitlePattern string          `json:"title_pattern"`
+	ID             uuid.UUID       `json:"id"`
+	ProjectID      uuid.UUID       `json:"project_id"`
+	AlertType      string          `json:"alert_type"`
+	Config         json.RawMessage `json:"config"`
+	Enabled        bool            `json:"enabled"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+	LevelFilter    string          `json:"level_filter"`
+	TitlePattern   string          `json:"title_pattern"`
+	MinEvents      int32           `json:"min_events"`
+	MinVelocity1h  int32           `json:"min_velocity_1h"`
+	ExcludePattern string          `json:"exclude_pattern"`
 }
 
 type ApiToken struct {

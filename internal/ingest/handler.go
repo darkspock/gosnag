@@ -171,6 +171,7 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 	}
 
 	isNew := issue.EventCount == 1
+	reopened := false
 
 	// Check if we should reopen a resolved issue
 	if !isNew && issue.Status == "resolved" {
@@ -185,7 +186,6 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 		}
 
 		if !issue.CooldownUntil.Valid && !issue.ResolvedInRelease.Valid {
-			// No cooldown and no release tracking - reopen immediately
 			shouldReopen = true
 		}
 
@@ -196,8 +196,8 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 			})
 			if err != nil {
 				slog.Error("failed to reopen issue", "error", err)
-			} else if h.alertFn != nil {
-				h.alertFn(projectID, issue, false)
+			} else {
+				reopened = true
 			}
 		}
 	}
@@ -212,13 +212,13 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 			})
 			if err != nil {
 				slog.Error("failed to unsnooze issue", "error", err)
-			} else if h.alertFn != nil {
-				h.alertFn(projectID, issue, false)
+			} else {
+				reopened = true
 			}
 		}
 	}
 
-	// Store the event
+	// Store the event first, so velocity queries include it
 	rawData, _ := json.Marshal(event.Raw)
 
 	eventID := event.EventID
@@ -247,9 +247,13 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 		return
 	}
 
-	// Alert on new issues (filtering handled by alert service)
-	if isNew && h.alertFn != nil {
-		h.alertFn(projectID, issue, true)
+	// Alert after event is persisted (so velocity queries include this event)
+	if h.alertFn != nil {
+		if isNew {
+			h.alertFn(projectID, issue, true)
+		} else if reopened {
+			h.alertFn(projectID, issue, false)
+		}
 	}
 
 	// Always run post-event hooks (priority recalc, auto-tags, etc.)

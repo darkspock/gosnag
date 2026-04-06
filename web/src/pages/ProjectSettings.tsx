@@ -99,6 +99,9 @@ export default function ProjectSettings() {
   const [alertConfig, setAlertConfig] = useState('')
   const [alertLevels, setAlertLevels] = useState<string[]>([])
   const [alertPattern, setAlertPattern] = useState('')
+  const [alertMinEvents, setAlertMinEvents] = useState('')
+  const [alertMinVelocity, setAlertMinVelocity] = useState('')
+  const [alertExcludePattern, setAlertExcludePattern] = useState('')
 
   const isAdmin = user?.role === 'admin'
 
@@ -205,6 +208,9 @@ export default function ProjectSettings() {
     setAlertConfig('')
     setAlertLevels([])
     setAlertPattern('')
+    setAlertMinEvents('')
+    setAlertMinVelocity('')
+    setAlertExcludePattern('')
     setShowAlertForm(true)
   }
 
@@ -218,6 +224,9 @@ export default function ProjectSettings() {
     )
     setAlertLevels(a.level_filter ? a.level_filter.split(',') : [])
     setAlertPattern(a.title_pattern || '')
+    setAlertMinEvents(a.min_events ? String(a.min_events) : '')
+    setAlertMinVelocity(a.min_velocity_1h ? String(a.min_velocity_1h) : '')
+    setAlertExcludePattern(a.exclude_pattern || '')
     setShowAlertForm(true)
   }
 
@@ -241,6 +250,9 @@ export default function ProjectSettings() {
           enabled: editingAlert.enabled,
           level_filter: levelFilter,
           title_pattern: alertPattern,
+          min_events: parseInt(alertMinEvents) || 0,
+          min_velocity_1h: parseInt(alertMinVelocity) || 0,
+          exclude_pattern: alertExcludePattern,
         })
       } else {
         await api.createAlert(projectId, {
@@ -249,6 +261,9 @@ export default function ProjectSettings() {
           enabled: true,
           level_filter: levelFilter,
           title_pattern: alertPattern,
+          min_events: parseInt(alertMinEvents) || 0,
+          min_velocity_1h: parseInt(alertMinVelocity) || 0,
+          exclude_pattern: alertExcludePattern,
         })
       }
       setAlerts(await api.listAlerts(projectId))
@@ -269,6 +284,9 @@ export default function ProjectSettings() {
       enabled: !a.enabled,
       level_filter: a.level_filter,
       title_pattern: a.title_pattern,
+      min_events: a.min_events || 0,
+      min_velocity_1h: a.min_velocity_1h || 0,
+      exclude_pattern: a.exclude_pattern || '',
     })
     setAlerts(await api.listAlerts(projectId))
   }
@@ -1571,7 +1589,7 @@ export default function ProjectSettings() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">Title filter</label>
+              <label className="text-sm font-medium">Title filter (include)</label>
               <p className="text-xs text-muted-foreground mb-1">Only alert when the issue title matches. Leave empty for all issues.</p>
               <Input
                 value={alertPattern}
@@ -1579,7 +1597,40 @@ export default function ProjectSettings() {
                 placeholder="e.g. database or ^Fatal.*timeout$"
                 className="mt-1"
               />
-              <p className="text-xs text-muted-foreground mt-1">Plain text = contains match. Supports regex.</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Title filter (exclude)</label>
+              <p className="text-xs text-muted-foreground mb-1">Suppress alert when the issue title matches this pattern.</p>
+              <Input
+                value={alertExcludePattern}
+                onChange={e => setAlertExcludePattern(e.target.value)}
+                placeholder="e.g. HealthCheck or ^Warning.*deprecated"
+                className="mt-1"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Min total events</label>
+                <p className="text-xs text-muted-foreground mb-1">Only alert if issue has at least this many events.</p>
+                <Input
+                  type="number"
+                  value={alertMinEvents}
+                  onChange={e => setAlertMinEvents(e.target.value)}
+                  placeholder="e.g. 100"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Min events in last hour</label>
+                <p className="text-xs text-muted-foreground mb-1">Only alert if issue received this many events in 1h (spike).</p>
+                <Input
+                  type="number"
+                  value={alertMinVelocity}
+                  onChange={e => setAlertMinVelocity(e.target.value)}
+                  placeholder="e.g. 10"
+                  className="mt-1"
+                />
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowAlertForm(false)}>Cancel</Button>

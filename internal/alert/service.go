@@ -29,7 +29,7 @@ func NewService(queries *db.Queries, cfg *config.Config) *Service {
 	}
 }
 
-// matchesAlert checks if an issue matches the alert's level and title filters.
+// matchesAlert checks if an issue matches the alert's filters.
 func matchesAlert(ac db.AlertConfig, issue db.Issue) bool {
 	// Level filter: comma-separated list of levels, empty = all
 	if ac.LevelFilter != "" {
@@ -50,13 +50,29 @@ func matchesAlert(ac db.AlertConfig, issue db.Issue) bool {
 	if ac.TitlePattern != "" {
 		re, err := regexp.Compile("(?i)" + ac.TitlePattern)
 		if err != nil {
-			// Invalid regex — treat as literal substring match
 			if !strings.Contains(strings.ToLower(issue.Title), strings.ToLower(ac.TitlePattern)) {
 				return false
 			}
 		} else if !re.MatchString(issue.Title) {
 			return false
 		}
+	}
+
+	// Exclude pattern: if title matches, suppress the alert
+	if ac.ExcludePattern != "" {
+		re, err := regexp.Compile("(?i)" + ac.ExcludePattern)
+		if err != nil {
+			if strings.Contains(strings.ToLower(issue.Title), strings.ToLower(ac.ExcludePattern)) {
+				return false
+			}
+		} else if re.MatchString(issue.Title) {
+			return false
+		}
+	}
+
+	// Min total events threshold
+	if ac.MinEvents > 0 && issue.EventCount < ac.MinEvents {
+		return false
 	}
 
 	return true
@@ -94,9 +110,25 @@ func (s *Service) Notify(projectID uuid.UUID, issue db.Issue, isNew bool) {
 		action = "Reopened issue"
 	}
 
+	// Lazy-load velocity only if any rule needs it
+	var velocity1h *int32
 	for _, ac := range configs {
 		if !matchesAlert(ac, issue) {
 			continue
+		}
+
+		// Velocity check: only query DB if rule requires it
+		if ac.MinVelocity1h > 0 {
+			if velocity1h == nil {
+				v, err := s.queries.GetIssueVelocity1h(ctx, issue.ID)
+				if err != nil {
+					v = 0
+				}
+				velocity1h = &v
+			}
+			if *velocity1h < ac.MinVelocity1h {
+				continue
+			}
 		}
 
 		switch ac.AlertType {
