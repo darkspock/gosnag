@@ -199,12 +199,18 @@ export default function IssueList() {
     if (sort !== 'last_seen') params.set('sort', sort)
     // Expand this section when clicking a filter
     setError('')
-    setCollapsed(prev => ({ ...prev, [section]: false }))
+    setCollapsed({ errors: true, warnings: true, info: true, [section]: false })
     setSearchParams(params)
   }
 
   const toggleCollapse = (section: Section) => {
-    setCollapsed(prev => ({ ...prev, [section]: !prev[section] }))
+    setCollapsed(prev => {
+      const willOpen = prev[section]
+      if (willOpen) {
+        return { errors: true, warnings: true, info: true, [section]: false }
+      }
+      return { ...prev, [section]: true }
+    })
   }
 
   const isActive = (section: Section, filterStatus: string, special?: string) => {
