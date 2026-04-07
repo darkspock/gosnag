@@ -83,7 +83,14 @@ func (d *Detector) detectForProject(ctx context.Context, projectID uuid.UUID) {
 			title += fmt.Sprintf(" — avg %.0f/req on %s", avgPerEvent, c.Transaction)
 		}
 
-		// Upsert as an issue
+		// Check if issue already exists — only create synthetic event for new detections
+		existing, err := d.queries.GetIssueByFingerprint(ctx, db.GetIssueByFingerprintParams{
+			ProjectID:   projectID,
+			Fingerprint: fingerprint,
+		})
+		isNew := err != nil || existing.Status != "open"
+
+		// Upsert as an issue (creates or updates title/last_seen)
 		issue, err := d.queries.UpsertIssue(ctx, db.UpsertIssueParams{
 			ProjectID:   projectID,
 			Title:       title,
@@ -97,7 +104,7 @@ func (d *Detector) detectForProject(ctx context.Context, projectID uuid.UUID) {
 			continue
 		}
 
-		// Auto-tag the issue
+		// Auto-tag the issue (idempotent)
 		d.ensureTag(ctx, issue.ID, "n1", "detected")
 		if c.TableName != "" {
 			d.ensureTag(ctx, issue.ID, "table", c.TableName)
@@ -106,38 +113,40 @@ func (d *Detector) detectForProject(ctx context.Context, projectID uuid.UUID) {
 			d.ensureTag(ctx, issue.ID, "transaction", c.Transaction)
 		}
 
-		// Create a synthetic event with the detection details
-		avgMs := 0.0
-		if c.EventCount > 0 {
-			avgMs = c.TotalExecMs / float64(c.EventCount)
-		}
-		eventData := map[string]any{
-			"n1_detection": map[string]any{
-				"query":           c.NormalizedQuery,
-				"table":           c.TableName,
-				"transaction":     c.Transaction,
-				"total_seen":      c.EventCount,
-				"distinct_events": c.DistinctEvents,
-				"avg_per_event":   avgPerEvent,
-				"avg_exec_ms":     avgMs,
-				"total_exec_ms":   c.TotalExecMs,
-				"first_seen":      c.FirstSeen,
-				"last_seen":       c.LastSeen,
-			},
-		}
-		rawData, _ := json.Marshal(eventData)
+		// Only create synthetic event for new detections or re-detections
+		if isNew {
+			avgMs := 0.0
+			if c.EventCount > 0 {
+				avgMs = c.TotalExecMs / float64(c.EventCount)
+			}
+			eventData := map[string]any{
+				"n1_detection": map[string]any{
+					"query":           c.NormalizedQuery,
+					"table":           c.TableName,
+					"transaction":     c.Transaction,
+					"total_seen":      c.EventCount,
+					"distinct_events": c.DistinctEvents,
+					"avg_per_event":   avgPerEvent,
+					"avg_exec_ms":     avgMs,
+					"total_exec_ms":   c.TotalExecMs,
+					"first_seen":      c.FirstSeen,
+					"last_seen":       c.LastSeen,
+				},
+			}
+			rawData, _ := json.Marshal(eventData)
 
-		d.queries.CreateEvent(ctx, db.CreateEventParams{
-			IssueID:        issue.ID,
-			ProjectID:      projectID,
-			EventID:        uuid.New().String(),
-			Timestamp:      time.Now(),
-			Platform:       "sql",
-			Level:          "warning",
-			Message:        title,
-			Data:           rawData,
-			UserIdentifier: "",
-		})
+			d.queries.CreateEvent(ctx, db.CreateEventParams{
+				IssueID:        issue.ID,
+				ProjectID:      projectID,
+				EventID:        uuid.New().String(),
+				Timestamp:      time.Now(),
+				Platform:       "sql",
+				Level:          "warning",
+				Message:        title,
+				Data:           rawData,
+				UserIdentifier: "",
+			})
+		}
 	}
 
 	// Auto-resolve N+1 issues not seen in 24h
@@ -145,24 +154,13 @@ func (d *Detector) detectForProject(ctx context.Context, projectID uuid.UUID) {
 }
 
 func (d *Detector) autoResolve(ctx context.Context, projectID uuid.UUID) {
-	// Find open N+1 issues where the underlying pattern hasn't been seen recently
-	issues, err := d.queries.ListIssuesByProject(ctx, db.ListIssuesByProjectParams{
-		ProjectID:   projectID,
-		Column2:     "open",
-		Limit:       1000,
-		Offset:      0,
-		LevelFilter: "warning",
-	})
+	issues, err := d.queries.ListOpenN1Issues(ctx, projectID)
 	if err != nil {
 		return
 	}
 
 	cutoff := time.Now().Add(-24 * time.Hour)
 	for _, iss := range issues {
-		// Only auto-resolve N+1 issues (fingerprint starts with "n1:")
-		if len(iss.Fingerprint) < 3 || iss.Fingerprint[:3] != "n1:" {
-			continue
-		}
 		if iss.LastSeen.Before(cutoff) {
 			d.queries.UpdateIssueStatus(ctx, db.UpdateIssueStatusParams{
 				ID:         iss.ID,

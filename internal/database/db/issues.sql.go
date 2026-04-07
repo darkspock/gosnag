@@ -319,6 +319,45 @@ func (q *Queries) GetIssue(ctx context.Context, id uuid.UUID) (Issue, error) {
 	return i, err
 }
 
+const getIssueByFingerprint = `-- name: GetIssueByFingerprint :one
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority FROM issues WHERE project_id = $1 AND fingerprint = $2
+`
+
+type GetIssueByFingerprintParams struct {
+	ProjectID   uuid.UUID `json:"project_id"`
+	Fingerprint string    `json:"fingerprint"`
+}
+
+func (q *Queries) GetIssueByFingerprint(ctx context.Context, arg GetIssueByFingerprintParams) (Issue, error) {
+	row := q.db.QueryRowContext(ctx, getIssueByFingerprint, arg.ProjectID, arg.Fingerprint)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Title,
+		&i.Fingerprint,
+		&i.Status,
+		&i.Level,
+		&i.Platform,
+		&i.FirstSeen,
+		&i.LastSeen,
+		&i.EventCount,
+		&i.AssignedTo,
+		&i.ResolvedAt,
+		&i.CooldownUntil,
+		&i.ResolvedInRelease,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SnoozeUntil,
+		&i.SnoozeEventThreshold,
+		&i.SnoozeEventsAtStart,
+		&i.JiraTicketKey,
+		&i.JiraTicketUrl,
+		&i.Priority,
+	)
+	return i, err
+}
+
 const getIssueCountsByStatus = `-- name: GetIssueCountsByStatus :many
 SELECT status, count(*)::int as count
 FROM issues
@@ -461,6 +500,59 @@ func (q *Queries) ListIssuesByProject(ctx context.Context, arg ListIssuesByProje
 		arg.LevelFilter,
 		arg.Search,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Issue{}
+	for rows.Next() {
+		var i Issue
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Title,
+			&i.Fingerprint,
+			&i.Status,
+			&i.Level,
+			&i.Platform,
+			&i.FirstSeen,
+			&i.LastSeen,
+			&i.EventCount,
+			&i.AssignedTo,
+			&i.ResolvedAt,
+			&i.CooldownUntil,
+			&i.ResolvedInRelease,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SnoozeUntil,
+			&i.SnoozeEventThreshold,
+			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
+			&i.Priority,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenN1Issues = `-- name: ListOpenN1Issues :many
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority FROM issues
+WHERE project_id = $1
+  AND status = 'open'
+  AND fingerprint LIKE 'n1:%'
+`
+
+func (q *Queries) ListOpenN1Issues(ctx context.Context, projectID uuid.UUID) ([]Issue, error) {
+	rows, err := q.db.QueryContext(ctx, listOpenN1Issues, projectID)
 	if err != nil {
 		return nil, err
 	}

@@ -125,3 +125,12 @@ WHERE project_id = $1
 
 -- name: ListIssuesByIDs :many
 SELECT * FROM issues WHERE id = ANY(@ids::uuid[]) ORDER BY last_seen DESC;
+
+-- name: GetIssueByFingerprint :one
+SELECT * FROM issues WHERE project_id = $1 AND fingerprint = $2;
+
+-- name: ListOpenN1Issues :many
+SELECT * FROM issues
+WHERE project_id = $1
+  AND status = 'open'
+  AND fingerprint LIKE 'n1:%';
