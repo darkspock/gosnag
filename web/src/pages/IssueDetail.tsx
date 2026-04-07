@@ -173,7 +173,7 @@ export default function IssueDetail() {
     <div>
       <Breadcrumb items={[
         { label: 'Projects', to: '/' },
-        { label: 'Issues', to: `/projects/${projectId}` },
+        { label: project?.name || 'Issues', to: `/projects/${projectId}` },
         { label: issue.title },
       ]} />
 
