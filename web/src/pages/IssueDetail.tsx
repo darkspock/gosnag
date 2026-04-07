@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { Check, X, EyeOff, RotateCcw, ChevronDown, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink, Plus } from 'lucide-react'
+import { Check, X, EyeOff, RotateCcw, ChevronDown, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink, Plus, Copy } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
@@ -351,6 +351,19 @@ export default function IssueDetail() {
             </button>
             {expandedEvent === event.id && (
               <div className="px-4 pb-4 animate-fade-in">
+                <div className="flex justify-end mb-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const text = JSON.stringify(event.data, null, 2)
+                      navigator.clipboard.writeText(text)
+                      toast.success('Event data copied to clipboard')
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5 mr-1" /> Copy event
+                  </Button>
+                </div>
                 <EventData data={event.data} />
               </div>
             )}
