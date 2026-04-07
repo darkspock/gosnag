@@ -33,6 +33,7 @@ export default function IssueDetail() {
   const [eventOffset, setEventOffset] = useState(0)
   const [eventTotal, setEventTotal] = useState(0)
   const [showDelete, setShowDelete] = useState(false)
+  const [titleExpanded, setTitleExpanded] = useState(false)
   const [creatingJira, setCreatingJira] = useState(false)
   const [issueTags, setIssueTags] = useState<IssueTag[]>([])
   const [tagInput, setTagInput] = useState('')
@@ -179,7 +180,14 @@ export default function IssueDetail() {
 
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold mb-2">{issue.title}</h1>
+          <h1
+            className={cn(
+              'text-xl font-semibold mb-2',
+              !titleExpanded && 'line-clamp-3 cursor-pointer'
+            )}
+            onClick={() => !titleExpanded && setTitleExpanded(true)}
+            title={!titleExpanded ? 'Click to expand' : undefined}
+          >{issue.title}</h1>
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant={issue.level === 'error' || issue.level === 'fatal' ? 'error' : 'warning'}>
               {issue.level}
