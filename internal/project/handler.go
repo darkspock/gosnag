@@ -16,10 +16,11 @@ import (
 
 type Handler struct {
 	queries *db.Queries
+	cache   *StatsCache
 }
 
-func NewHandler(queries *db.Queries) *Handler {
-	return &Handler{queries: queries}
+func NewHandler(queries *db.Queries, cache *StatsCache) *Handler {
+	return &Handler{queries: queries, cache: cache}
 }
 
 type CreateProjectRequest struct {
@@ -152,68 +153,11 @@ type ProjectListItem struct {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	projects, err := h.queries.ListProjects(ctx)
+	result, err := h.cache.Get(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list projects")
 		return
 	}
-
-	stats, _ := h.queries.GetProjectStats(ctx)
-	statsMap := make(map[uuid.UUID]db.GetProjectStatsRow)
-	for _, s := range stats {
-		statsMap[s.ProjectID] = s
-	}
-
-	trendRows, _ := h.queries.GetProjectEventTrend(ctx)
-	releaseRows, _ := h.queries.GetProjectLatestRelease(ctx)
-	weeklyRows, _ := h.queries.GetProjectWeeklyErrors(ctx)
-
-	// Build trend map (14 daily buckets per project)
-	now := time.Now().UTC().Truncate(24 * time.Hour)
-	trendMap := make(map[uuid.UUID][]int32)
-	for _, tr := range trendRows {
-		daysAgo := int(now.Sub(tr.Bucket.UTC().Truncate(24*time.Hour)).Hours() / 24)
-		if daysAgo < 0 || daysAgo >= 14 {
-			continue
-		}
-		if trendMap[tr.ProjectID] == nil {
-			trendMap[tr.ProjectID] = make([]int32, 14)
-		}
-		trendMap[tr.ProjectID][13-daysAgo] = tr.Count
-	}
-
-	releaseMap := make(map[uuid.UUID]string)
-	for _, r := range releaseRows {
-		releaseMap[r.ProjectID] = r.Release
-	}
-
-	weeklyMap := make(map[uuid.UUID]db.GetProjectWeeklyErrorsRow)
-	for _, w := range weeklyRows {
-		weeklyMap[w.ProjectID] = w
-	}
-
-	result := make([]ProjectListItem, len(projects))
-	for i, p := range projects {
-		item := ProjectListItem{SafeProject: toSafeProject(p), Trend: make([]int32, 14)}
-		if s, ok := statsMap[p.ID]; ok {
-			item.TotalIssues = s.TotalIssues
-			item.OpenIssues = s.OpenIssues
-			if t, ok := s.LatestEvent.(time.Time); ok {
-				item.LatestEvent = t.Format(time.RFC3339)
-			}
-		}
-		if t, ok := trendMap[p.ID]; ok {
-			item.Trend = t
-		}
-		item.LatestRelease = releaseMap[p.ID]
-		if w, ok := weeklyMap[p.ID]; ok {
-			item.ErrorsThisWeek = w.ThisWeek
-			item.ErrorsLastWeek = w.LastWeek
-		}
-		result[i] = item
-	}
-
 	writeJSON(w, http.StatusOK, result)
 }
 

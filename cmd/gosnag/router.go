@@ -63,7 +63,8 @@ func corsMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	queries := db.New(database)
 
-	projectHandler := project.NewHandler(queries)
+	statsCache := project.NewStatsCache(queries, 30*time.Second)
+	projectHandler := project.NewHandler(queries, statsCache)
 	issueHandler := issue.NewHandler(queries, database)
 	userHandler := user.NewHandler(queries)
 	alertHandler := alert.NewHandler(queries)
@@ -79,6 +80,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 			go jira.CheckAndCreateTicket(context.Background(), queries, cfg.BaseURL, projectID, iss)
 		},
 		func(projectID uuid.UUID, iss db.Issue, eventData json.RawMessage) {
+			statsCache.Invalidate()
 			go priority.Evaluate(context.Background(), queries, projectID, iss, eventData)
 			go tags.AutoTag(context.Background(), queries, projectID, iss, eventData)
 			go n1.ExtractAndStore(context.Background(), queries, projectID, eventData)
