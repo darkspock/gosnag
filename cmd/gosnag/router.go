@@ -63,7 +63,7 @@ func corsMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	queries := db.New(database)
 
-	statsCache := project.NewStatsCache(queries, 30*time.Second)
+	statsCache := project.NewStatsCache(queries, 48*time.Hour)
 	projectHandler := project.NewHandler(queries, statsCache)
 	issueHandler := issue.NewHandler(queries, database)
 	userHandler := user.NewHandler(queries)
