@@ -54,18 +54,40 @@ func MiddlewareWithToken(queries *db.Queries, baseURL string) func(http.Handler)
 					return
 				}
 
-				// Validate token is scoped to the requested project
+				// Personal tokens (scope=global): load the creator user into context
+				// so RequireAdmin/RequireWritePermission work via user role
+				if token.Scope == "global" {
+					if !token.CreatedBy.Valid {
+						http.Error(w, `{"error":"personal token has no associated user"}`, http.StatusForbidden)
+						return
+					}
+					user, err := queries.GetUser(r.Context(), token.CreatedBy.UUID)
+					if err != nil {
+						http.Error(w, `{"error":"token owner not found"}`, http.StatusForbidden)
+						return
+					}
+					if user.Status != "active" {
+						http.Error(w, `{"error":"token owner is disabled"}`, http.StatusForbidden)
+						return
+					}
+					go queries.UpdateAPITokenLastUsed(context.Background(), token.ID)
+					ctx := r.Context()
+					ctx = context.WithValue(ctx, tokenContextKey, &token)
+					ctx = context.WithValue(ctx, userContextKey, &user)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+
+				// Project-scoped tokens: validate against the requested project
 				projectID := chi.URLParam(r, "project_id")
 				if projectID == "" {
-					// chi.URLParam may not be available yet in middleware; extract from path
 					projectID = extractProjectIDFromPath(r.URL.Path)
 				}
 				if projectID == "" {
-					// Token auth requires a project-scoped route
-					http.Error(w, `{"error":"api tokens can only access project-scoped endpoints"}`, http.StatusForbidden)
+					http.Error(w, `{"error":"project-scoped tokens can only access project endpoints"}`, http.StatusForbidden)
 					return
 				}
-				if token.ProjectID.String() != projectID {
+				if !token.ProjectID.Valid || token.ProjectID.UUID.String() != projectID {
 					http.Error(w, `{"error":"token not authorized for this project"}`, http.StatusForbidden)
 					return
 				}

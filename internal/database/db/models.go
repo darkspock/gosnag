@@ -31,7 +31,7 @@ type AlertConfig struct {
 
 type ApiToken struct {
 	ID         uuid.UUID     `json:"id"`
-	ProjectID  uuid.UUID     `json:"project_id"`
+	ProjectID  uuid.NullUUID `json:"project_id"`
 	TokenHash  string        `json:"token_hash"`
 	Name       string        `json:"name"`
 	Permission string        `json:"permission"`
@@ -39,6 +39,7 @@ type ApiToken struct {
 	ExpiresAt  sql.NullTime  `json:"expires_at"`
 	CreatedBy  uuid.NullUUID `json:"created_by"`
 	CreatedAt  time.Time     `json:"created_at"`
+	Scope      string        `json:"scope"`
 }
 
 type Event struct {

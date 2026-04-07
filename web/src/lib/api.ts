@@ -148,6 +148,13 @@ export const api = {
     request<AlertConfig>(`/projects/${projectId}/alerts/${alertId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAlert: (projectId: string, alertId: string) =>
     request<void>(`/projects/${projectId}/alerts/${alertId}`, { method: 'DELETE' }),
+
+  // Global tokens
+  listGlobalTokens: () => request<any[]>('/tokens'),
+  createGlobalToken: (data: { name: string; permission: string; expires_in?: number }) =>
+    request<any>('/tokens', { method: 'POST', body: JSON.stringify(data) }),
+  deleteGlobalToken: (tokenId: string) =>
+    request<void>(`/tokens/${tokenId}`, { method: 'DELETE' }),
 }
 
 // Types

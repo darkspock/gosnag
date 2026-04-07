@@ -8,6 +8,7 @@ import IssueList from '@/pages/IssueList'
 import IssueDetail from '@/pages/IssueDetail'
 import ProjectSettings from '@/pages/ProjectSettings'
 import UserManagement from '@/pages/UserManagement'
+import AdminSettings from '@/pages/AdminSettings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -32,6 +33,7 @@ function AppRoutes() {
         <Route path="/projects/:projectId/issues/:issueId" element={<IssueDetail />} />
         <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
         <Route path="/users" element={<UserManagement />} />
+        <Route path="/admin" element={<AdminSettings />} />
       </Route>
     </Routes>
   )

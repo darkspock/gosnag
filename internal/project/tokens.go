@@ -20,9 +20,10 @@ type CreateTokenRequest struct {
 
 type TokenResponse struct {
 	ID         uuid.UUID  `json:"id"`
-	ProjectID  uuid.UUID  `json:"project_id"`
+	ProjectID  *string    `json:"project_id"`
 	Name       string     `json:"name"`
 	Permission string     `json:"permission"`
+	Scope      string     `json:"scope"`
 	Token      string     `json:"token,omitempty"` // only on create
 	LastUsedAt *time.Time `json:"last_used_at"`
 	ExpiresAt  *time.Time `json:"expires_at"`
@@ -36,7 +37,7 @@ func (h *Handler) ListTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens, err := h.queries.ListAPITokensByProject(r.Context(), projectID)
+	tokens, err := h.queries.ListAPITokensByProject(r.Context(), uuid.NullUUID{UUID: projectID, Valid: true})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list tokens")
 		return
@@ -78,10 +79,11 @@ func (h *Handler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	plain, hash := auth.GenerateAPIToken()
 
 	params := db.CreateAPITokenParams{
-		ProjectID:  projectID,
+		ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
 		TokenHash:  hash,
 		Name:       req.Name,
 		Permission: req.Permission,
+		Scope:      "project",
 	}
 
 	if req.ExpiresIn != nil && *req.ExpiresIn > 0 {
@@ -120,7 +122,7 @@ func (h *Handler) DeleteToken(w http.ResponseWriter, r *http.Request) {
 
 	err = h.queries.DeleteAPIToken(r.Context(), db.DeleteAPITokenParams{
 		ID:        tokenID,
-		ProjectID: projectID,
+		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete token")
@@ -130,13 +132,103 @@ func (h *Handler) DeleteToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// --- Global tokens ---
+
+func (h *Handler) ListGlobalTokens(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUserFromContext(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	tokens, err := h.queries.ListGlobalTokens(r.Context(), uuid.NullUUID{UUID: user.ID, Valid: true})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list tokens")
+		return
+	}
+	resp := make([]TokenResponse, len(tokens))
+	for i, t := range tokens {
+		resp[i] = tokenToResponse(t)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) CreateGlobalToken(w http.ResponseWriter, r *http.Request) {
+	var req CreateTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if req.Permission == "" {
+		req.Permission = "readwrite"
+	}
+	if req.Permission != "read" && req.Permission != "readwrite" {
+		writeError(w, http.StatusBadRequest, "permission must be 'read' or 'readwrite'")
+		return
+	}
+
+	plain, hash := auth.GenerateAPIToken()
+	params := db.CreateAPITokenParams{
+		TokenHash:  hash,
+		Name:       req.Name,
+		Permission: req.Permission,
+		Scope:      "global",
+	}
+	if req.ExpiresIn != nil && *req.ExpiresIn > 0 {
+		exp := time.Now().AddDate(0, 0, *req.ExpiresIn)
+		params.ExpiresAt = sql.NullTime{Time: exp, Valid: true}
+	}
+	user := auth.GetUserFromContext(r.Context())
+	if user != nil {
+		params.CreatedBy = uuid.NullUUID{UUID: user.ID, Valid: true}
+	}
+
+	token, err := h.queries.CreateAPIToken(r.Context(), params)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create token")
+		return
+	}
+
+	resp := tokenToResponse(token)
+	resp.Token = plain
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+func (h *Handler) DeleteGlobalToken(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUserFromContext(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	tokenID, err := uuid.Parse(chi.URLParam(r, "tokenId"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid token id")
+		return
+	}
+	if err := h.queries.DeleteGlobalToken(r.Context(), db.DeleteGlobalTokenParams{
+		ID:        tokenID,
+		CreatedBy: uuid.NullUUID{UUID: user.ID, Valid: true},
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete token")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func tokenToResponse(t db.ApiToken) TokenResponse {
 	resp := TokenResponse{
 		ID:         t.ID,
-		ProjectID:  t.ProjectID,
 		Name:       t.Name,
 		Permission: t.Permission,
+		Scope:      t.Scope,
 		CreatedAt:  t.CreatedAt,
+	}
+	if t.ProjectID.Valid {
+		s := t.ProjectID.UUID.String()
+		resp.ProjectID = &s
 	}
 	if t.LastUsedAt.Valid {
 		resp.LastUsedAt = &t.LastUsedAt.Time

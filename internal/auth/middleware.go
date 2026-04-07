@@ -54,11 +54,19 @@ func Middleware(queries *db.Queries, baseURL string) func(http.Handler) http.Han
 }
 
 // RequireAdmin checks that the authenticated user has admin role.
+// For token-authenticated requests, also enforces readwrite permission
+// since RequireAdmin is used on mutation routes (POST, PUT, DELETE).
 func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := GetUserFromContext(r.Context())
 		if user == nil || user.Role != "admin" {
 			http.Error(w, `{"error":"admin access required"}`, http.StatusForbidden)
+			return
+		}
+		// If authenticated via API token, enforce readwrite permission
+		token := GetAPITokenFromContext(r.Context())
+		if token != nil && token.Permission != "readwrite" {
+			http.Error(w, `{"error":"token has read-only access"}`, http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)

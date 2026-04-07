@@ -110,6 +110,13 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 
 		r.Get("/me", oauthHandler.Me)
 
+		// Personal Access Tokens (any authenticated user)
+		r.Route("/tokens", func(r chi.Router) {
+			r.Get("/", projectHandler.ListGlobalTokens)
+			r.With(auth.RequireWritePermission).Post("/", projectHandler.CreateGlobalToken)
+			r.With(auth.RequireWritePermission).Delete("/{tokenId}", projectHandler.DeleteGlobalToken)
+		})
+
 		// Project Groups
 		r.Route("/groups", func(r chi.Router) {
 			r.Get("/", projectHandler.ListGroups)

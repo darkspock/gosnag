@@ -3,12 +3,13 @@ import { useAuth } from '@/lib/use-auth'
 import { Button } from '@/components/ui/button'
 import { Toaster } from '@/components/ui/toast'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
-import { Bug, FolderOpen, Users, LogOut } from 'lucide-react'
+import { Bug, FolderOpen, Users, LogOut, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/', label: 'Projects', icon: FolderOpen },
   { to: '/users', label: 'Users', icon: Users },
+  { to: '/admin', label: 'Tokens', icon: Settings },
 ]
 
 export default function Layout() {

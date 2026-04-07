@@ -13,18 +13,19 @@ import (
 )
 
 const createAPIToken = `-- name: CreateAPIToken :one
-INSERT INTO api_tokens (project_id, token_hash, name, permission, expires_at, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, project_id, token_hash, name, permission, last_used_at, expires_at, created_by, created_at
+INSERT INTO api_tokens (project_id, token_hash, name, permission, expires_at, created_by, scope)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, project_id, token_hash, name, permission, last_used_at, expires_at, created_by, created_at, scope
 `
 
 type CreateAPITokenParams struct {
-	ProjectID  uuid.UUID     `json:"project_id"`
+	ProjectID  uuid.NullUUID `json:"project_id"`
 	TokenHash  string        `json:"token_hash"`
 	Name       string        `json:"name"`
 	Permission string        `json:"permission"`
 	ExpiresAt  sql.NullTime  `json:"expires_at"`
 	CreatedBy  uuid.NullUUID `json:"created_by"`
+	Scope      string        `json:"scope"`
 }
 
 func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) (ApiToken, error) {
@@ -35,6 +36,7 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 		arg.Permission,
 		arg.ExpiresAt,
 		arg.CreatedBy,
+		arg.Scope,
 	)
 	var i ApiToken
 	err := row.Scan(
@@ -47,6 +49,7 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 		&i.ExpiresAt,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.Scope,
 	)
 	return i, err
 }
@@ -56,8 +59,8 @@ DELETE FROM api_tokens WHERE id = $1 AND project_id = $2
 `
 
 type DeleteAPITokenParams struct {
-	ID        uuid.UUID `json:"id"`
-	ProjectID uuid.UUID `json:"project_id"`
+	ID        uuid.UUID     `json:"id"`
+	ProjectID uuid.NullUUID `json:"project_id"`
 }
 
 func (q *Queries) DeleteAPIToken(ctx context.Context, arg DeleteAPITokenParams) error {
@@ -65,8 +68,22 @@ func (q *Queries) DeleteAPIToken(ctx context.Context, arg DeleteAPITokenParams) 
 	return err
 }
 
+const deleteGlobalToken = `-- name: DeleteGlobalToken :exec
+DELETE FROM api_tokens WHERE id = $1 AND scope = 'global' AND created_by = $2
+`
+
+type DeleteGlobalTokenParams struct {
+	ID        uuid.UUID     `json:"id"`
+	CreatedBy uuid.NullUUID `json:"created_by"`
+}
+
+func (q *Queries) DeleteGlobalToken(ctx context.Context, arg DeleteGlobalTokenParams) error {
+	_, err := q.db.ExecContext(ctx, deleteGlobalToken, arg.ID, arg.CreatedBy)
+	return err
+}
+
 const getAPITokenByHash = `-- name: GetAPITokenByHash :one
-SELECT id, project_id, token_hash, name, permission, last_used_at, expires_at, created_by, created_at FROM api_tokens WHERE token_hash = $1
+SELECT id, project_id, token_hash, name, permission, last_used_at, expires_at, created_by, created_at, scope FROM api_tokens WHERE token_hash = $1
 `
 
 func (q *Queries) GetAPITokenByHash(ctx context.Context, tokenHash string) (ApiToken, error) {
@@ -82,15 +99,16 @@ func (q *Queries) GetAPITokenByHash(ctx context.Context, tokenHash string) (ApiT
 		&i.ExpiresAt,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.Scope,
 	)
 	return i, err
 }
 
 const listAPITokensByProject = `-- name: ListAPITokensByProject :many
-SELECT id, project_id, token_hash, name, permission, last_used_at, expires_at, created_by, created_at FROM api_tokens WHERE project_id = $1 ORDER BY created_at DESC
+SELECT id, project_id, token_hash, name, permission, last_used_at, expires_at, created_by, created_at, scope FROM api_tokens WHERE project_id = $1 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListAPITokensByProject(ctx context.Context, projectID uuid.UUID) ([]ApiToken, error) {
+func (q *Queries) ListAPITokensByProject(ctx context.Context, projectID uuid.NullUUID) ([]ApiToken, error) {
 	rows, err := q.db.QueryContext(ctx, listAPITokensByProject, projectID)
 	if err != nil {
 		return nil, err
@@ -109,6 +127,45 @@ func (q *Queries) ListAPITokensByProject(ctx context.Context, projectID uuid.UUI
 			&i.ExpiresAt,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.Scope,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGlobalTokens = `-- name: ListGlobalTokens :many
+SELECT id, project_id, token_hash, name, permission, last_used_at, expires_at, created_by, created_at, scope FROM api_tokens WHERE scope = 'global' AND created_by = $1 ORDER BY created_at DESC
+`
+
+func (q *Queries) ListGlobalTokens(ctx context.Context, createdBy uuid.NullUUID) ([]ApiToken, error) {
+	rows, err := q.db.QueryContext(ctx, listGlobalTokens, createdBy)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApiToken{}
+	for rows.Next() {
+		var i ApiToken
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.TokenHash,
+			&i.Name,
+			&i.Permission,
+			&i.LastUsedAt,
+			&i.ExpiresAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.Scope,
 		); err != nil {
 			return nil, err
 		}
