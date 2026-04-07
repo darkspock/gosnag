@@ -144,6 +144,7 @@ type Project struct {
 	JiraProjectKey         string        `json:"jira_project_key"`
 	JiraIssueType          string        `json:"jira_issue_type"`
 	GroupID                uuid.NullUUID `json:"group_id"`
+	MaxEventsPerIssue      int32         `json:"max_events_per_issue"`
 }
 
 type ProjectFavorite struct {

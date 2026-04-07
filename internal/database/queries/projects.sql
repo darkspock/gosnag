@@ -16,6 +16,7 @@ SELECT * FROM projects ORDER BY created_at DESC;
 UPDATE projects
 SET name = $2, slug = $3, default_cooldown_minutes = $4, warning_as_error = $5,
     jira_base_url = $6, jira_email = $7, jira_api_token = $8, jira_project_key = $9, jira_issue_type = $10,
+    max_events_per_issue = $11,
     updated_at = now()
 WHERE id = $1
 RETURNING *;

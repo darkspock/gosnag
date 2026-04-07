@@ -28,6 +28,7 @@ type CreateProjectRequest struct {
 	Slug                   string `json:"slug"`
 	DefaultCooldownMinutes *int32 `json:"default_cooldown_minutes,omitempty"`
 	WarningAsError         *bool  `json:"warning_as_error,omitempty"`
+	MaxEventsPerIssue      *int32 `json:"max_events_per_issue,omitempty"`
 	JiraBaseURL            string `json:"jira_base_url"`
 	JiraEmail              string `json:"jira_email"`
 	JiraAPIToken           string `json:"jira_api_token"`
@@ -43,6 +44,7 @@ type SafeProject struct {
 	Slug                   string    `json:"slug"`
 	DefaultCooldownMinutes int32     `json:"default_cooldown_minutes"`
 	WarningAsError         bool      `json:"warning_as_error"`
+	MaxEventsPerIssue      int32     `json:"max_events_per_issue"`
 	JiraBaseURL            string    `json:"jira_base_url"`
 	JiraEmail              string    `json:"jira_email"`
 	JiraAPITokenSet        bool      `json:"jira_api_token_set"` // true if configured, never expose the value
@@ -68,6 +70,7 @@ func toSafeProject(p db.Project) SafeProject {
 		Slug:                   p.Slug,
 		DefaultCooldownMinutes: p.DefaultCooldownMinutes,
 		WarningAsError:         p.WarningAsError,
+		MaxEventsPerIssue:      p.MaxEventsPerIssue,
 		JiraBaseURL:            p.JiraBaseUrl,
 		JiraEmail:              p.JiraEmail,
 		JiraAPITokenSet:        p.JiraApiToken != "",
@@ -260,6 +263,11 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		jiraApiToken = existing.JiraApiToken
 	}
 
+	maxEvents := existing.MaxEventsPerIssue
+	if req.MaxEventsPerIssue != nil {
+		maxEvents = *req.MaxEventsPerIssue
+	}
+
 	project, err := h.queries.UpdateProject(r.Context(), db.UpdateProjectParams{
 		ID:                     id,
 		Name:                   name,
@@ -271,6 +279,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		JiraApiToken:           jiraApiToken,
 		JiraProjectKey:         jiraProjectKey,
 		JiraIssueType:          jiraIssueType,
+		MaxEventsPerIssue:      maxEvents,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {

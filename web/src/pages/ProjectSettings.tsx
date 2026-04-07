@@ -106,6 +106,7 @@ export default function ProjectSettings() {
   const [slug, setSlug] = useState('')
   const [defaultCooldown, setDefaultCooldown] = useState('60')
   const [warningAsError, setWarningAsError] = useState(false)
+  const [maxEventsPerIssue, setMaxEventsPerIssue] = useState('1000')
   const [activeSection, setActiveSection] = useState<SettingsSection>('general')
   const [savingGeneral, setSavingGeneral] = useState(false)
   const [savingJira, setSavingJira] = useState(false)
@@ -131,6 +132,7 @@ export default function ProjectSettings() {
     setSlug(p.slug)
     setDefaultCooldown(String(p.default_cooldown_minutes ?? 60))
     setWarningAsError(p.warning_as_error)
+    setMaxEventsPerIssue(String(p.max_events_per_issue ?? 1000))
     setJiraBaseUrl(p.jira_base_url || '')
     setJiraEmail(p.jira_email || '')
     setJiraApiToken('')
@@ -150,6 +152,7 @@ export default function ProjectSettings() {
     slug,
     default_cooldown_minutes: parseInt(defaultCooldown) || 0,
     warning_as_error: warningAsError,
+    max_events_per_issue: parseInt(maxEventsPerIssue) || 0,
     jira_base_url: jiraBaseUrl,
     jira_email: jiraEmail,
     jira_api_token: jiraApiToken,
@@ -766,6 +769,20 @@ export default function ProjectSettings() {
                           Promote incoming warning events to error issues when enabled.
                         </p>
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium">Max Events per Issue</label>
+                      <Input
+                        type="number"
+                        value={maxEventsPerIssue}
+                        onChange={e => setMaxEventsPerIssue(e.target.value)}
+                        min="0"
+                        className="mt-1 max-w-xs"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Stop recording new events for an issue after this limit. Set to 0 for unlimited.
+                      </p>
                     </div>
 
                     {allGroups.length > 0 && (

@@ -181,6 +181,7 @@ export interface Project {
   slug: string
   default_cooldown_minutes: number
   warning_as_error: boolean
+  max_events_per_issue: number
   jira_base_url: string
   jira_email: string
   jira_api_token_set: boolean

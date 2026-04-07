@@ -218,6 +218,12 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 		}
 	}
 
+	// Check per-issue event cap (0 = unlimited)
+	maxEvents := project.MaxEventsPerIssue
+	if maxEvents > 0 && issue.EventCount > maxEvents {
+		return
+	}
+
 	// Store the event first, so velocity queries include it
 	rawData, _ := json.Marshal(event.Raw)
 
