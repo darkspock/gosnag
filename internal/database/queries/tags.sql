@@ -16,7 +16,9 @@ WHERE issue_id IN (SELECT id FROM issues WHERE project_id = $1)
 ORDER BY key, value;
 
 -- name: ListIssueIDsByTag :many
-SELECT issue_id FROM issue_tags WHERE key = $1 AND value = $2;
+SELECT it.issue_id FROM issue_tags it
+JOIN issues i ON i.id = it.issue_id
+WHERE it.key = $1 AND it.value = $2 AND i.project_id = $3;
 
 -- name: ListTagRules :many
 SELECT * FROM tag_rules WHERE project_id = $1 ORDER BY created_at;

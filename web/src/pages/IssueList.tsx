@@ -171,16 +171,16 @@ export default function IssueList() {
       .finally(() => setLoading(false))
   }, [projectId, status, level, activeFilter, offset, refreshKey, searchQuery])
 
-  // Refresh counts after list loads
+  // Refresh counts only on manual refresh (not on initial load — already fetched above)
   useEffect(() => {
-    if (!projectId || loading) return
+    if (!projectId || refreshKey === 0) return
 
     fetchSectionCounts(projectId).then(counts => {
       setErrorCounts(counts.errors)
       setWarningCounts(counts.warnings)
       setInfoCounts(counts.info)
     })
-  }, [projectId, loading, refreshKey])
+  }, [projectId, refreshKey])
 
   const setFilter = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams)

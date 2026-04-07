@@ -122,3 +122,6 @@ WHERE project_id = $1
     OR ($2::text = 'errors_w' AND level IN ('error', 'fatal', 'warning'))
     OR ($2::text = 'informational' AND level IN ('warning', 'info', 'debug'))
     OR ($2::text = 'info_only' AND level IN ('info', 'debug')));
+
+-- name: ListIssuesByIDs :many
+SELECT * FROM issues WHERE id = ANY(@ids::uuid[]) ORDER BY last_seen DESC;

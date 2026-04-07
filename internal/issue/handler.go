@@ -104,23 +104,29 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		parts := strings.SplitN(tagFilter, ":", 2)
 		if len(parts) == 2 {
 			tagIssueIDs, _ := h.queries.ListIssueIDsByTag(r.Context(), db.ListIssueIDsByTagParams{
-				Key:   parts[0],
-				Value: parts[1],
+				Key:       parts[0],
+				Value:     parts[1],
+				ProjectID: projectID,
 			})
 			tagAllowed = make(map[uuid.UUID]bool, len(tagIssueIDs))
 			for _, id := range tagIssueIDs {
 				tagAllowed[id] = true
 			}
-			// Add tag-matched issues not in current page (they matched by tag, not title)
+			// Batch-load tag-matched issues not in current page
 			existing := make(map[uuid.UUID]bool, len(issues))
 			for _, iss := range issues {
 				existing[iss.ID] = true
 			}
+			var missing []uuid.UUID
 			for _, id := range tagIssueIDs {
 				if !existing[id] {
-					if iss, err := h.queries.GetIssue(r.Context(), id); err == nil && iss.ProjectID == projectID {
-						issues = append(issues, iss)
-					}
+					missing = append(missing, id)
+				}
+			}
+			if len(missing) > 0 {
+				extra, err := h.queries.ListIssuesByIDs(r.Context(), missing)
+				if err == nil {
+					issues = append(issues, extra...)
 				}
 			}
 		}

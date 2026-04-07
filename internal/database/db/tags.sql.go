@@ -157,16 +157,19 @@ func (q *Queries) ListEnabledTagRules(ctx context.Context, projectID uuid.UUID) 
 }
 
 const listIssueIDsByTag = `-- name: ListIssueIDsByTag :many
-SELECT issue_id FROM issue_tags WHERE key = $1 AND value = $2
+SELECT it.issue_id FROM issue_tags it
+JOIN issues i ON i.id = it.issue_id
+WHERE it.key = $1 AND it.value = $2 AND i.project_id = $3
 `
 
 type ListIssueIDsByTagParams struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	Key       string    `json:"key"`
+	Value     string    `json:"value"`
+	ProjectID uuid.UUID `json:"project_id"`
 }
 
 func (q *Queries) ListIssueIDsByTag(ctx context.Context, arg ListIssueIDsByTagParams) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, listIssueIDsByTag, arg.Key, arg.Value)
+	rows, err := q.db.QueryContext(ctx, listIssueIDsByTag, arg.Key, arg.Value, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

@@ -162,7 +162,13 @@ func Evaluate(ctx context.Context, queries *db.Queries, projectID uuid.UUID, iss
 }
 
 // EvaluateAll recalculates priority for all issues in a project.
+// Loads rules once and reuses them across all issues to avoid N+1 queries.
 func EvaluateAll(ctx context.Context, queries *db.Queries, projectID uuid.UUID) (int, error) {
+	rules, err := queries.ListEnabledPriorityRules(ctx, projectID)
+	if err != nil || len(rules) == 0 {
+		return 0, err
+	}
+
 	issueIDs, err := queries.ListIssueIDsByProject(ctx, projectID)
 	if err != nil {
 		return 0, err
@@ -174,16 +180,99 @@ func EvaluateAll(ctx context.Context, queries *db.Queries, projectID uuid.UUID) 
 		if err != nil {
 			continue
 		}
-		// For bulk recalc, load latest event data
 		var eventData json.RawMessage
 		events, err := queries.ListEventsByIssue(ctx, db.ListEventsByIssueParams{IssueID: id, Limit: 1, Offset: 0})
 		if err == nil && len(events) > 0 {
 			eventData = events[0].Data
 		}
-		Evaluate(ctx, queries, projectID, issue, eventData)
+		evaluateWithRules(ctx, queries, rules, issue, eventData)
 		count++
 	}
 	return count, nil
+}
+
+// evaluateWithRules scores an issue using pre-loaded rules (avoids reloading per issue).
+func evaluateWithRules(ctx context.Context, queries *db.Queries, rules []db.PriorityRule, issue db.Issue, eventData json.RawMessage) {
+	eventText := string(eventData)
+	searchText := issue.Title + "\n" + eventText
+
+	loader := &priorityLoader{queries: queries, ctx: ctx, cache: cache}
+	evalCtx := conditions.NewEvalContext(conditions.IssueData{
+		ID:         issue.ID,
+		Title:      issue.Title,
+		Level:      issue.Level,
+		Platform:   issue.Platform,
+		EventCount: issue.EventCount,
+	}, eventText, loader)
+
+	var velocity1h, velocity24h, userCount *int32
+	score := int32(50)
+
+	for _, rule := range rules {
+		matched := false
+
+		if rule.Conditions.Valid {
+			var group conditions.Group
+			if err := json.Unmarshal(rule.Conditions.RawMessage, &group); err == nil {
+				matched = conditions.Evaluate(group, evalCtx)
+			}
+		} else {
+			switch rule.RuleType {
+			case "velocity_1h":
+				if velocity1h == nil {
+					v := getVelocity1h(ctx, queries, issue.ID)
+					velocity1h = &v
+				}
+				matched = compareInt(*velocity1h, rule.Operator, rule.Threshold)
+			case "velocity_24h":
+				if velocity24h == nil {
+					v := getVelocity24h(ctx, queries, issue.ID)
+					velocity24h = &v
+				}
+				matched = compareInt(*velocity24h, rule.Operator, rule.Threshold)
+			case "total_events":
+				matched = compareInt(issue.EventCount, rule.Operator, rule.Threshold)
+			case "user_count":
+				if userCount == nil {
+					uc := getUserCount(ctx, queries, issue.ID)
+					userCount = &uc
+				}
+				matched = compareInt(*userCount, rule.Operator, rule.Threshold)
+			case "title_contains":
+				if rule.Pattern != "" {
+					matched = matchesPattern(rule.Pattern, searchText)
+				}
+			case "title_not_contains":
+				if rule.Pattern != "" {
+					matched = !matchesPattern(rule.Pattern, searchText)
+				}
+			case "level_is":
+				matched = strings.EqualFold(issue.Level, rule.Pattern)
+			case "platform_is":
+				matched = strings.EqualFold(issue.Platform, rule.Pattern)
+			}
+		}
+
+		if matched {
+			score += rule.Points
+		}
+	}
+
+	if score < 0 {
+		score = 0
+	}
+	if score > 100 {
+		score = 100
+	}
+
+	if score != issue.Priority {
+		if err := queries.UpdateIssuePriority(ctx, db.UpdateIssuePriorityParams{
+			ID:       issue.ID,
+			Priority: score,
+		}); err != nil {
+			slog.Error("failed to update issue priority", "error", err, "issue_id", issue.ID)
+		}
+	}
 }
 
 func matchesPattern(pattern, text string) bool {

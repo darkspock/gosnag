@@ -364,6 +364,56 @@ func (q *Queries) GetIssueCountsByStatus(ctx context.Context, arg GetIssueCounts
 	return items, nil
 }
 
+const listIssuesByIDs = `-- name: ListIssuesByIDs :many
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority FROM issues WHERE id = ANY($1::uuid[]) ORDER BY last_seen DESC
+`
+
+func (q *Queries) ListIssuesByIDs(ctx context.Context, ids []uuid.UUID) ([]Issue, error) {
+	rows, err := q.db.QueryContext(ctx, listIssuesByIDs, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Issue{}
+	for rows.Next() {
+		var i Issue
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Title,
+			&i.Fingerprint,
+			&i.Status,
+			&i.Level,
+			&i.Platform,
+			&i.FirstSeen,
+			&i.LastSeen,
+			&i.EventCount,
+			&i.AssignedTo,
+			&i.ResolvedAt,
+			&i.CooldownUntil,
+			&i.ResolvedInRelease,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SnoozeUntil,
+			&i.SnoozeEventThreshold,
+			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
+			&i.Priority,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIssuesByProject = `-- name: ListIssuesByProject :many
 
 SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority FROM issues
