@@ -195,7 +195,7 @@ export default function IssueList() {
     const params = new URLSearchParams(searchParams)
     if (value) params.set(key, value)
     else params.delete(key)
-    params.delete('offset')
+    if (key !== 'offset') params.delete('offset')
     setError('')
     setSearchParams(params)
   }
