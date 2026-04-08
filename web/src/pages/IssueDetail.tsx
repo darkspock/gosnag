@@ -55,7 +55,6 @@ export default function IssueDetail() {
       api.listEvents(projectId, issueId, { limit: eventLimit, offset: 0 }).then(r => {
         setEvents(r.events)
         setEventTotal(r.total)
-        if (r.events.length > 0) setExpandedEvent(r.events[0].id)
       }),
       api.listUsers().then(setUsers),
       api.listIssueTags(projectId, issueId).then(setIssueTags),
