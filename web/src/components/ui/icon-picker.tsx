@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { Input } from '@/components/ui/input'
 import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
+// @ts-expect-error — no type declarations for internal DynamicIcon module
 import DynamicIcon, { iconNames } from 'lucide-react/dist/esm/DynamicIcon'
 
 export const PROJECT_COLORS = [
