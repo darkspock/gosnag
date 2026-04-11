@@ -219,6 +219,22 @@ export const api = {
     return request<ActivityListResponse>(`/projects/${projectId}/issues/${issueId}/activities?${q}`)
   },
 
+  // Uploads
+  uploadImage: async (file: File): Promise<string> => {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch('/api/v1/upload', {
+      method: 'POST',
+      body: form,
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error || 'Upload failed')
+    }
+    const data = await res.json()
+    return data.url
+  },
+
   // Alerts
   listAlerts: (projectId: string) => request<AlertConfig[]>(`/projects/${projectId}/alerts`),
   createAlert: (projectId: string, data: { alert_type: string; config: object; enabled: boolean; level_filter?: string; title_pattern?: string; min_events?: number; min_velocity_1h?: number; exclude_pattern?: string; conditions?: object }) =>

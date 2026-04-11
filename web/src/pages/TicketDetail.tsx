@@ -6,41 +6,42 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Check, ExternalLink, ArrowLeft, Pencil, Send } from 'lucide-react'
+import { Check, ExternalLink, ArrowUpRight, Pencil, Send, ChevronRight, AlertTriangle } from 'lucide-react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { RichEditor, RichViewer } from '@/components/ui/rich-editor'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
 
-const STATUS_STYLE: Record<string, string> = {
-  acknowledged: 'bg-amber-500/15 text-amber-400',
-  in_progress: 'bg-blue-500/15 text-blue-400',
-  in_review: 'bg-purple-500/15 text-purple-400',
-  done: 'bg-emerald-500/15 text-emerald-400',
-  wontfix: 'bg-slate-500/15 text-slate-400',
-  escalated: 'bg-orange-500/15 text-orange-400',
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  acknowledged: 'Acknowledged',
-  in_progress: 'In Progress',
-  in_review: 'In Review',
-  done: 'Done',
-  wontfix: "Won't Fix",
-  escalated: 'Escalated',
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; step: number }> = {
+  acknowledged: { label: 'Acknowledged', color: 'text-amber-400', bg: 'bg-amber-500', step: 0 },
+  in_progress:  { label: 'In Progress',  color: 'text-blue-400',  bg: 'bg-blue-500',  step: 1 },
+  in_review:    { label: 'In Review',     color: 'text-purple-400', bg: 'bg-purple-500', step: 2 },
+  done:         { label: 'Done',          color: 'text-emerald-400', bg: 'bg-emerald-500', step: 3 },
+  wontfix:      { label: "Won't Fix",     color: 'text-slate-400', bg: 'bg-slate-500', step: 3 },
+  escalated:    { label: 'Escalated',     color: 'text-orange-400', bg: 'bg-orange-500', step: -1 },
 }
 
 const TRANSITION_LABEL: Record<string, string> = {
-  in_progress: 'Start',
+  in_progress: 'Start Working',
   in_review: 'Submit for Review',
-  done: 'Done',
+  done: 'Mark Done',
   wontfix: "Won't Fix",
   escalated: 'Escalate',
   acknowledged: 'Reopen',
 }
 
-const PRIORITY_LABEL: Record<number, string> = { 90: 'P1 Critical', 70: 'P2 High', 50: 'P3 Medium', 25: 'P4 Low' }
+const TRANSITION_VARIANT: Record<string, 'default' | 'outline' | 'secondary'> = {
+  done: 'default',
+  in_progress: 'default',
+  in_review: 'secondary',
+  wontfix: 'outline',
+  escalated: 'outline',
+  acknowledged: 'outline',
+}
+
+const WORKFLOW_STEPS = ['Acknowledged', 'In Progress', 'In Review', 'Done']
 
 export default function TicketDetail() {
   const { projectId, ticketId } = useParams<{ projectId: string; ticketId: string }>()
@@ -54,6 +55,9 @@ export default function TicketDetail() {
   const [issueTitle, setIssueTitle] = useState('')
   const [issueCulprit, setIssueCulprit] = useState('')
   const [issueLevel, setIssueLevel] = useState('')
+  const [issueEventCount, setIssueEventCount] = useState(0)
+  const [issueFirstSeen, setIssueFirstSeen] = useState('')
+  const [issueLastSeen, setIssueLastSeen] = useState('')
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [editingDescription, setEditingDescription] = useState(false)
@@ -62,7 +66,6 @@ export default function TicketDetail() {
   const [commentBody, setCommentBody] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
 
-  // Resolution dialog
   const [showResolution, setShowResolution] = useState(false)
   const [resolutionType, setResolutionType] = useState('fixed')
   const [fixReference, setFixReference] = useState('')
@@ -79,6 +82,9 @@ export default function TicketDetail() {
           setIssueTitle(issue.title)
           setIssueCulprit(issue.culprit || '')
           setIssueLevel(issue.level || '')
+          setIssueEventCount(issue.event_count || 0)
+          setIssueFirstSeen(issue.first_seen || '')
+          setIssueLastSeen(issue.last_seen || '')
           api.listActivities(projectId, t.issue_id, { limit: 100 }).then(r => setActivities(r.activities)).catch(() => {})
           api.listComments(projectId, t.issue_id).then(setComments).catch(() => {})
         } catch { /* */ }
@@ -116,7 +122,7 @@ export default function TicketDetail() {
       if (ticket.issue_id) {
         api.listActivities(projectId, ticket.issue_id, { limit: 100 }).then(r => setActivities(r.activities)).catch(() => {})
       }
-      toast.success(`Ticket → ${STATUS_LABEL[newStatus] || newStatus}${force ? ' (forced)' : ''}`)
+      toast.success(`Ticket → ${STATUS_CONFIG[newStatus]?.label || newStatus}${force ? ' (forced)' : ''}`)
     } catch (e: unknown) {
       if (isApiError(e) && e.status === 409 && e.body.can_force) {
         if (confirm(`Transition from "${ticket.status}" to "${newStatus}" is not standard. Force it?`)) {
@@ -167,6 +173,13 @@ export default function TicketDetail() {
     }
   }
 
+  const handleSaveTitle = async () => {
+    if (!projectId || !ticketId) return
+    const updated = await api.updateTicket(projectId, ticketId, { title: titleDraft })
+    setTicket(updated)
+    setEditingTitle(false)
+  }
+
   const handleSaveDescription = async () => {
     if (!projectId || !ticketId) return
     try {
@@ -186,323 +199,392 @@ export default function TicketDetail() {
       const created = await api.createComment(projectId, ticket.issue_id, commentBody.trim())
       setComments(prev => [...prev, created])
       setCommentBody('')
-      toast.success('Comment added')
     } finally {
       setSubmittingComment(false)
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-muted-foreground">Loading...</div>
-  if (!ticket) return <div className="p-8 text-center text-muted-foreground">Ticket not found</div>
+  if (loading) return <div className="py-16 text-center text-muted-foreground animate-fade-in">Loading...</div>
+  if (!ticket) return <div className="py-16 text-center text-muted-foreground">Ticket not found</div>
+
+  const statusCfg = STATUS_CONFIG[ticket.status] || STATUS_CONFIG.acknowledged
+  // priorityCfg available for future sidebar enhancements
 
   return (
-    <div>
+    <div className="animate-fade-in">
       <Breadcrumb items={[
         { label: 'Projects', to: '/' },
         { label: project?.name || '', to: `/projects/${projectId}` },
         { label: 'Tickets', to: `/projects/${projectId}/tickets` },
-        { label: `Ticket` },
+        { label: ticket.title || issueTitle || 'Ticket' },
       ]} />
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div className="min-w-0">
-          {issueCulprit && (
-            <p className="text-sm font-semibold text-muted-foreground mb-0.5">{issueCulprit}</p>
-          )}
-          {editingTitle ? (
-            <div className="flex items-center gap-2">
-              <input
-                value={titleDraft}
-                onChange={e => setTitleDraft(e.target.value)}
-                className="text-xl font-semibold bg-background border rounded px-2 py-0.5 flex-1"
-                autoFocus
-                onKeyDown={async e => {
-                  if (e.key === 'Enter' && projectId && ticketId) {
-                    const updated = await api.updateTicket(projectId, ticketId, { title: titleDraft })
-                    setTicket(updated)
-                    setEditingTitle(false)
-                  }
-                  if (e.key === 'Escape') setEditingTitle(false)
-                }}
-              />
-              <Button size="sm" onClick={async () => {
-                if (!projectId || !ticketId) return
-                const updated = await api.updateTicket(projectId, ticketId, { title: titleDraft })
-                setTicket(updated)
-                setEditingTitle(false)
-              }}>Save</Button>
-              <Button size="sm" variant="outline" onClick={() => setEditingTitle(false)}>Cancel</Button>
-            </div>
-          ) : (
-            <h1
-              className="text-xl font-semibold truncate cursor-pointer hover:text-primary/80 transition-colors group"
-              onClick={() => { setTitleDraft(ticket.title || issueTitle); setEditingTitle(true) }}
-            >
-              {ticket.title || issueTitle || 'Ticket'}
-              <Pencil className="h-3.5 w-3.5 inline ml-2 opacity-0 group-hover:opacity-50" />
-            </h1>
-          )}
-          {ticket.title && ticket.title !== issueTitle && (
-            <p className="text-sm text-muted-foreground truncate">{issueTitle}</p>
-          )}
-          <div className="flex items-center gap-2 mt-1">
-            <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', STATUS_STYLE[ticket.status] || 'bg-muted text-muted-foreground')}>
-              {STATUS_LABEL[ticket.status] || ticket.status}
-            </span>
-            {issueLevel && (
-              <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full',
-                issueLevel === 'fatal' || issueLevel === 'error' ? 'bg-red-500/15 text-red-400' :
-                issueLevel === 'warning' ? 'bg-amber-500/15 text-amber-400' :
-                'bg-muted text-muted-foreground'
-              )}>{issueLevel}</span>
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Main content — left */}
+        <div className="flex-1 min-w-0">
+
+          {/* Header */}
+          <div className="mb-6">
+            {issueCulprit && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1 font-mono">
+                {issueCulprit}
+              </div>
             )}
-            <span className="text-xs text-muted-foreground">
-              {PRIORITY_LABEL[ticket.priority] || `P${ticket.priority}`}
-            </span>
-            <Link
-              to={`/projects/${projectId}/issues/${ticket.issue_id}`}
-              className="text-xs text-primary hover:underline flex items-center gap-1"
-            >
-              <ArrowLeft className="h-3 w-3" /> View issue
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* Escalated banner */}
-      {ticket.status === 'escalated' && ticket.escalated_url && (
-        <div className="mb-4 rounded-md bg-orange-500/10 border border-orange-500/20 p-3 text-sm">
-          Tracked in{' '}
-          <a href={ticket.escalated_url} target="_blank" rel="noopener noreferrer" className="font-medium text-orange-400 hover:underline">
-            {ticket.escalated_key || 'external tracker'} <ExternalLink className="inline h-3 w-3" />
-          </a>
-        </div>
-      )}
-
-      {/* Resolution info */}
-      {ticket.status === 'done' && ticket.resolution_type && (
-        <div className="mb-4 rounded-md bg-emerald-500/10 border border-emerald-500/20 p-3 text-sm space-y-0.5">
-          <div><span className="text-muted-foreground">Resolution:</span> <span className="font-medium">{ticket.resolution_type.replace('_', ' ')}</span></div>
-          {ticket.fix_reference && <div><span className="text-muted-foreground">Fix:</span> <span className="font-mono text-xs">{ticket.fix_reference}</span></div>}
-          {ticket.resolution_notes && <div className="text-xs text-muted-foreground mt-1">{ticket.resolution_notes}</div>}
-        </div>
-      )}
-
-      {/* Management panel */}
-      <div className="grid gap-4 md:grid-cols-2 mb-6">
-        <div className="rounded-lg border bg-card p-4 space-y-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Details</h3>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Assignee</span>
-              <Select
-                value={ticket.assigned_to || ''}
-                onChange={e => handleAssign(e.target.value || null)}
-                className="h-7 text-xs w-auto max-w-[180px]"
+            {editingTitle ? (
+              <div className="flex items-center gap-2 mb-1">
+                <input
+                  value={titleDraft}
+                  onChange={e => setTitleDraft(e.target.value)}
+                  className="text-lg font-semibold bg-background border rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleSaveTitle()
+                    if (e.key === 'Escape') setEditingTitle(false)
+                  }}
+                />
+                <Button size="sm" onClick={handleSaveTitle}>Save</Button>
+                <Button size="sm" variant="outline" onClick={() => setEditingTitle(false)}>Cancel</Button>
+              </div>
+            ) : (
+              <h1
+                className="text-lg font-semibold leading-tight cursor-pointer group"
+                onClick={() => { setTitleDraft(ticket.title || issueTitle); setEditingTitle(true) }}
               >
-                <option value="">Unassigned</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.name || u.email}</option>
-                ))}
-              </Select>
-            </div>
+                {ticket.title || issueTitle || 'Untitled ticket'}
+                <Pencil className="h-3 w-3 inline ml-2 opacity-0 group-hover:opacity-40 transition-opacity" />
+              </h1>
+            )}
+            {ticket.title && ticket.title !== issueTitle && (
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">{issueTitle}</p>
+            )}
 
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Priority</span>
-              <Select
-                value={String(ticket.priority)}
-                onChange={e => handlePriorityChange(parseInt(e.target.value))}
-                className="h-7 text-xs w-auto"
-              >
-                <option value="90">P1 Critical</option>
-                <option value="70">P2 High</option>
-                <option value="50">P3 Medium</option>
-                <option value="25">P4 Low</option>
-              </Select>
-            </div>
+            {/* Workflow progress */}
+            {ticket.status !== 'escalated' && ticket.status !== 'wontfix' && (
+              <div className="flex items-center gap-0 mt-4">
+                {WORKFLOW_STEPS.map((step, i) => {
+                  const isActive = i === statusCfg.step
+                  const isPast = i < statusCfg.step
+                  return (
+                    <div key={step} className="flex items-center flex-1 last:flex-none">
+                      <div className={cn(
+                        'flex items-center justify-center h-7 rounded-full text-[10px] font-medium transition-all',
+                        isActive ? cn(statusCfg.bg, 'text-white px-3') :
+                        isPast ? 'bg-emerald-500/20 text-emerald-400 px-3' :
+                        'bg-muted text-muted-foreground/40 px-3'
+                      )}>
+                        {isPast ? <Check className="h-3 w-3 mr-0.5" /> : null}
+                        {step}
+                      </div>
+                      {i < WORKFLOW_STEPS.length - 1 && (
+                        <div className={cn(
+                          'flex-1 h-px mx-1',
+                          isPast || isActive ? 'bg-emerald-500/30' : 'bg-border'
+                        )} />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Created</span>
-              <span className="text-xs text-muted-foreground">{new Date(ticket.created_at).toLocaleString()}</span>
-            </div>
+            {ticket.status === 'escalated' && (
+              <div className="mt-3 rounded-md bg-orange-500/10 border border-orange-500/20 px-3 py-2 text-sm flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
+                <span>Escalated to external tracker</span>
+                {ticket.escalated_url && (
+                  <a href={ticket.escalated_url} target="_blank" rel="noopener noreferrer" className="ml-auto font-medium text-orange-400 hover:underline flex items-center gap-1">
+                    {ticket.escalated_key || 'View'} <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+            )}
 
-            {ticket.due_date && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Due</span>
-                <span className={cn(
-                  'text-xs',
-                  new Date(ticket.due_date) < new Date() ? 'text-red-400' : 'text-muted-foreground'
-                )}>{new Date(ticket.due_date).toLocaleDateString()}</span>
+            {ticket.status === 'wontfix' && (
+              <div className="mt-3 rounded-md bg-slate-500/10 border border-slate-500/20 px-3 py-2 text-sm text-slate-400">
+                Marked as won't fix
+              </div>
+            )}
+
+            {ticket.status === 'done' && ticket.resolution_type && (
+              <div className="mt-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-emerald-400" />
+                  <span className="font-medium text-emerald-400">{ticket.resolution_type.replace('_', ' ')}</span>
+                  {ticket.fix_reference && <span className="font-mono text-xs text-muted-foreground ml-2">{ticket.fix_reference}</span>}
+                </div>
+                {ticket.resolution_notes && <p className="text-xs text-muted-foreground mt-1 ml-6">{ticket.resolution_notes}</p>}
               </div>
             )}
           </div>
-        </div>
 
-        <div className="rounded-lg border bg-card p-4 space-y-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Actions</h3>
-          <div className="flex flex-wrap gap-2">
-            {transitions.map(t => (
-              <Button
-                key={t}
-                size="sm"
-                variant={t === 'done' ? 'default' : 'outline'}
-                onClick={() => handleStatusChange(t)}
+          {/* Description */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">Description</h3>
+              {!editingDescription && (
+                <button
+                  onClick={() => { setDescriptionDraft(ticket.description || ''); setEditingDescription(true) }}
+                  className="text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {editingDescription ? (
+              <div>
+                <RichEditor
+                  content={descriptionDraft}
+                  onChange={setDescriptionDraft}
+                  placeholder="Describe the problem, investigation notes, root cause..."
+                  onImageUpload={api.uploadImage}
+                />
+                <div className="flex justify-end gap-2 mt-2">
+                  <Button size="sm" variant="outline" onClick={() => setEditingDescription(false)}>Cancel</Button>
+                  <Button size="sm" onClick={handleSaveDescription}>Save</Button>
+                </div>
+              </div>
+            ) : ticket.description ? (
+              <div
+                className="cursor-pointer rounded-md p-3 -mx-3 hover:bg-card/50 transition-colors"
+                onClick={() => { setDescriptionDraft(ticket.description || ''); setEditingDescription(true) }}
               >
-                {TRANSITION_LABEL[t] || t.replace('_', ' ')}
-              </Button>
-            ))}
+                <RichViewer content={ticket.description} />
+              </div>
+            ) : (
+              <button
+                onClick={() => { setDescriptionDraft(''); setEditingDescription(true) }}
+                className="w-full text-left text-sm text-muted-foreground/40 italic rounded-md border border-dashed p-3 hover:border-muted-foreground/30 hover:text-muted-foreground/60 transition-colors"
+              >
+                Click to add a description...
+              </button>
+            )}
           </div>
 
-          {/* All statuses as secondary options for forced transitions */}
-          <div className="border-t pt-3">
-            <p className="text-xs text-muted-foreground mb-2">Force transition to:</p>
-            <div className="flex flex-wrap gap-1">
-              {['acknowledged', 'in_progress', 'in_review', 'done', 'wontfix', 'escalated']
-                .filter(s => s !== ticket.status && !transitions.includes(s))
-                .map(s => (
-                  <button
-                    key={s}
-                    className="text-xs px-2 py-1 rounded border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-                    onClick={() => handleStatusChange(s)}
-                  >
-                    {STATUS_LABEL[s] || s}
-                  </button>
-                ))}
+          {/* Comments + Activity unified stream */}
+          <div className="mb-6">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mb-3">
+              Activity & Comments
+            </h3>
+
+            <div className="relative">
+              {/* Timeline line */}
+              <div className="absolute left-3 top-0 bottom-0 w-px bg-border" />
+
+              <div className="space-y-0">
+                {/* Merge activities and comments, sort by time ascending */}
+                {[
+                  ...activities.map(a => ({ type: 'activity' as const, data: a, time: new Date(a.created_at).getTime() })),
+                  ...comments.map(c => ({ type: 'comment' as const, data: c, time: new Date(c.created_at).getTime() })),
+                ].sort((a, b) => a.time - b.time).map((item) => {
+                  if (item.type === 'comment') {
+                    const c = item.data as IssueComment
+                    return (
+                      <div key={`c-${c.id}`} className="relative pl-9 py-2">
+                        <div className="absolute left-1 top-3">
+                          {c.user_avatar ? (
+                            <img src={c.user_avatar} alt="" className="h-5 w-5 rounded-full ring-2 ring-background" />
+                          ) : (
+                            <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-bold text-primary ring-2 ring-background">
+                              {(c.user_name || c.user_email || '?')[0]?.toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="rounded-md border bg-card p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium">{c.user_name || c.user_email}</span>
+                            <span className="text-[10px] text-muted-foreground">{new Date(c.created_at).toLocaleString()}</span>
+                          </div>
+                          <div className="text-sm prose prose-sm prose-invert max-w-none [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded [&_code]:text-xs [&_a]:text-primary [&_p]:my-0.5">
+                            <Markdown remarkPlugins={[remarkGfm]}>{c.body.replace(/@([\w.-]+)/g, '**@$1**')}</Markdown>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  const a = item.data as Activity
+                  return (
+                    <div key={`a-${a.id}`} className="relative pl-9 py-1.5">
+                      <div className="absolute left-1.5 top-2.5">
+                        <div className={cn(
+                          'h-4 w-4 rounded-full flex items-center justify-center ring-2 ring-background',
+                          a.user_id ? 'bg-muted' : 'bg-muted'
+                        )}>
+                          <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground/70">
+                        <span className="font-medium text-muted-foreground">{a.user_name || 'System'}</span>
+                        {' '}
+                        {a.action === 'ticket_status_changed' ? (
+                          <>moved to <span className={cn('font-medium', STATUS_CONFIG[a.new_value || '']?.color)}>{STATUS_CONFIG[a.new_value || '']?.label || a.new_value}</span></>
+                        ) : a.action === 'ticket_created' ? (
+                          <>created this ticket</>
+                        ) : a.action === 'ticket_assigned' ? (
+                          <>assigned the ticket</>
+                        ) : a.action === 'ticket_priority_changed' ? (
+                          <>changed priority</>
+                        ) : a.action === 'status_changed' ? (
+                          <>changed issue status to <span className="font-mono">{a.new_value}</span></>
+                        ) : a.action === 'auto_reopened' ? (
+                          <>issue auto-reopened</>
+                        ) : a.action === 'first_seen' ? (
+                          <>issue detected</>
+                        ) : (
+                          <>{a.action.replace(/_/g, ' ')}</>
+                        )}
+                        <span className="ml-1.5 opacity-50">{new Date(a.created_at).toLocaleString()}</span>
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Description */}
-      <div className="mb-6 rounded-lg border bg-card p-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Description</h3>
-          {!editingDescription && (
-            <button
-              onClick={() => { setDescriptionDraft(ticket.description || ''); setEditingDescription(true) }}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Pencil className="h-3 w-3 inline mr-0.5" /> Edit
-            </button>
-          )}
-        </div>
-        {editingDescription ? (
-          <div>
-            <textarea
-              value={descriptionDraft}
-              onChange={e => setDescriptionDraft(e.target.value)}
-              placeholder="Describe the problem, investigation notes, root cause..."
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm min-h-[120px] resize-y"
-            />
-            <div className="flex justify-end gap-2 mt-2">
-              <Button size="sm" variant="outline" onClick={() => setEditingDescription(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleSaveDescription}>Save</Button>
-            </div>
-          </div>
-        ) : ticket.description ? (
-          <div className="text-sm prose prose-sm prose-invert max-w-none [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded [&_code]:text-xs [&_a]:text-primary [&_p]:my-1">
-            <Markdown remarkPlugins={[remarkGfm]}>{ticket.description}</Markdown>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground/50 italic">No description yet. Click edit to add one.</p>
-        )}
-      </div>
-
-      {/* Comments */}
-      <div className="mb-6">
-        <h2 className="text-base font-semibold mb-3">Comments ({comments.length})</h2>
-        <div className="space-y-3">
-          {comments.map(c => (
-            <div key={c.id} className="flex gap-2">
-              <div className="shrink-0">
-                {c.user_avatar ? (
-                  <img src={c.user_avatar} alt="" className="h-6 w-6 rounded-full" />
+            {/* Add comment */}
+            <div className="relative pl-9 pt-3">
+              <div className="absolute left-1 top-4">
+                {currentUser?.avatar_url ? (
+                  <img src={currentUser.avatar_url} alt="" className="h-5 w-5 rounded-full ring-2 ring-background" />
                 ) : (
-                  <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-medium text-primary">
-                    {(c.user_name || c.user_email || '?')[0]?.toUpperCase()}
+                  <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-bold text-primary ring-2 ring-background">
+                    {(currentUser?.name || currentUser?.email || '?')[0]?.toUpperCase()}
                   </div>
                 )}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-xs font-medium">{c.user_name || c.user_email}</span>
-                  <span className="text-[10px] text-muted-foreground">{new Date(c.created_at).toLocaleString()}</span>
-                </div>
-                <div className="text-sm prose prose-sm prose-invert max-w-none [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded [&_code]:text-xs [&_a]:text-primary [&_p]:my-1">
-                  <Markdown remarkPlugins={[remarkGfm]}>{c.body.replace(/@([\w.-]+)/g, '**@$1**')}</Markdown>
-                </div>
+              <div className="flex gap-2 items-end">
+                <textarea
+                  value={commentBody}
+                  onChange={e => setCommentBody(e.target.value)}
+                  placeholder="Add a comment... (Markdown supported)"
+                  className="flex-1 text-sm rounded-md border bg-card px-3 py-2 min-h-[44px] max-h-[200px] resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/30"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault()
+                      handleAddComment()
+                    }
+                  }}
+                />
+                <Button size="sm" disabled={!commentBody.trim() || submittingComment} onClick={handleAddComment} className="h-[44px] px-3">
+                  <Send className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-          ))}
+          </div>
         </div>
 
-        {/* Add comment */}
-        <div className="flex gap-2 items-start mt-4">
-          <div className="shrink-0 mt-0.5">
-            {currentUser?.avatar_url ? (
-              <img src={currentUser.avatar_url} alt="" className="h-6 w-6 rounded-full" />
-            ) : (
-              <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-medium text-primary">
-                {(currentUser?.name || currentUser?.email || '?')[0]?.toUpperCase()}
+        {/* Sidebar — right */}
+        <div className="lg:w-[280px] shrink-0">
+          <div className="lg:sticky lg:top-20 space-y-4">
+
+            {/* Actions */}
+            <div className="rounded-lg border bg-card p-3 space-y-2">
+              {transitions.map(t => (
+                <Button
+                  key={t}
+                  size="sm"
+                  variant={TRANSITION_VARIANT[t] || 'outline'}
+                  className="w-full justify-start"
+                  onClick={() => handleStatusChange(t)}
+                >
+                  <ChevronRight className="h-3.5 w-3.5 mr-1.5 opacity-50" />
+                  {TRANSITION_LABEL[t] || t.replace('_', ' ')}
+                </Button>
+              ))}
+
+              {/* Force transitions */}
+              {['acknowledged', 'in_progress', 'in_review', 'done', 'wontfix', 'escalated']
+                .filter(s => s !== ticket.status && !transitions.includes(s)).length > 0 && (
+                <div className="pt-2 border-t">
+                  <p className="text-[10px] text-muted-foreground/50 mb-1.5">Force:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {['acknowledged', 'in_progress', 'in_review', 'done', 'wontfix', 'escalated']
+                      .filter(s => s !== ticket.status && !transitions.includes(s))
+                      .map(s => (
+                        <button
+                          key={s}
+                          className="text-[10px] px-1.5 py-0.5 rounded border border-border/50 text-muted-foreground/40 hover:text-muted-foreground hover:border-border transition-colors"
+                          onClick={() => handleStatusChange(s)}
+                        >
+                          {STATUS_CONFIG[s]?.label || s}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Details */}
+            <div className="rounded-lg border bg-card p-3 space-y-3">
+              <div>
+                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">Assignee</label>
+                <Select
+                  value={ticket.assigned_to || ''}
+                  onChange={e => handleAssign(e.target.value || null)}
+                  className="h-7 text-xs mt-0.5"
+                >
+                  <option value="">Unassigned</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                  ))}
+                </Select>
               </div>
-            )}
+
+              <div>
+                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">Priority</label>
+                <Select
+                  value={String(ticket.priority)}
+                  onChange={e => handlePriorityChange(parseInt(e.target.value))}
+                  className="h-7 text-xs mt-0.5"
+                >
+                  <option value="90">P1 Critical</option>
+                  <option value="70">P2 High</option>
+                  <option value="50">P3 Medium</option>
+                  <option value="25">P4 Low</option>
+                </Select>
+              </div>
+
+              <div className="pt-2 border-t space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">Level</span>
+                  <span className={cn('text-xs font-medium',
+                    issueLevel === 'fatal' || issueLevel === 'error' ? 'text-red-400' :
+                    issueLevel === 'warning' ? 'text-amber-400' : 'text-muted-foreground'
+                  )}>{issueLevel}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">Events</span>
+                  <span className="text-xs font-mono text-muted-foreground">{issueEventCount}</span>
+                </div>
+                {issueFirstSeen && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">First seen</span>
+                    <span className="text-[10px] text-muted-foreground">{new Date(issueFirstSeen).toLocaleString()}</span>
+                  </div>
+                )}
+                {issueLastSeen && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">Last seen</span>
+                    <span className="text-[10px] text-muted-foreground">{new Date(issueLastSeen).toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">Created</span>
+                  <span className="text-[10px] text-muted-foreground">{new Date(ticket.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+
+              <Link
+                to={`/projects/${projectId}/issues/${ticket.issue_id}`}
+                className="flex items-center gap-1.5 text-xs text-primary hover:underline pt-2 border-t"
+              >
+                <ArrowUpRight className="h-3 w-3" />
+                View issue details
+              </Link>
+            </div>
           </div>
-          <textarea
-            value={commentBody}
-            onChange={e => setCommentBody(e.target.value)}
-            placeholder="Add a comment... (supports Markdown)"
-            className="flex-1 text-sm rounded-md border bg-background px-3 py-2 min-h-[50px] resize-none"
-          />
-          <Button size="sm" disabled={!commentBody.trim() || submittingComment} onClick={handleAddComment} className="mt-0.5">
-            <Send className="h-4 w-4" />
-          </Button>
         </div>
       </div>
-
-      {/* Activity timeline */}
-      {activities.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-base font-semibold mb-3">Activity</h2>
-          <div className="space-y-2">
-            {[...activities].reverse().map(a => (
-              <div key={a.id} className="flex items-start gap-2 text-xs text-muted-foreground">
-                <div className={cn(
-                  'mt-0.5 h-5 w-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold',
-                  a.user_id ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
-                )}>
-                  {a.user_name ? a.user_name.charAt(0).toUpperCase() : 'S'}
-                </div>
-                <div className="min-w-0">
-                  <span className="font-medium text-foreground">{a.user_name || 'System'}</span>
-                  {' '}
-                  {a.action === 'ticket_status_changed' ? (
-                    <>changed status to <span className="font-mono">{a.new_value}</span></>
-                  ) : a.action === 'ticket_created' ? (
-                    <>created this ticket</>
-                  ) : a.action === 'ticket_assigned' ? (
-                    <>assigned the ticket</>
-                  ) : a.action === 'ticket_priority_changed' ? (
-                    <>changed priority to {a.new_value}</>
-                  ) : a.action === 'status_changed' ? (
-                    <>changed issue status to <span className="font-mono">{a.new_value}</span></>
-                  ) : a.action === 'commented' ? (
-                    <>added a comment</>
-                  ) : a.action === 'auto_reopened' ? (
-                    <>issue auto-reopened</>
-                  ) : a.action === 'first_seen' ? (
-                    <>issue detected</>
-                  ) : (
-                    <>{a.action.replace(/_/g, ' ')}</>
-                  )}
-                  <span className="ml-1.5 opacity-60">{new Date(a.created_at).toLocaleString()}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Resolution Dialog */}
       <Dialog open={showResolution} onOpenChange={setShowResolution}>

@@ -22,6 +22,7 @@ import (
 	"github.com/darkspock/gosnag/internal/jira"
 	"github.com/darkspock/gosnag/internal/n1"
 	"github.com/darkspock/gosnag/internal/ticket"
+	"github.com/darkspock/gosnag/internal/upload"
 	"github.com/darkspock/gosnag/internal/priority"
 	"github.com/darkspock/gosnag/internal/project"
 	"github.com/darkspock/gosnag/internal/tags"
@@ -75,6 +76,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	jiraHandler := jira.NewHandler(queries, cfg)
 	githubHandler := github.NewHandler(queries, cfg)
 	activityHandler := activitypkg.NewHandler(queries)
+	uploadHandler := upload.NewHandler("uploads", cfg.BaseURL)
 	priorityHandler := priority.NewHandler(queries)
 	tagsHandler := tags.NewHandler(queries)
 	oauthHandler := auth.NewOAuthHandler(queries, cfg)
@@ -262,6 +264,16 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 			r.With(auth.RequireAdmin).Put("/{user_id}/status", userHandler.UpdateStatus)
 		})
 	})
+
+	// File uploads
+	r.Route("/api/v1/upload", func(r chi.Router) {
+		r.Use(auth.MiddlewareWithToken(queries, cfg.BaseURL))
+		r.Post("/", uploadHandler.Upload)
+	})
+
+	// Serve uploaded files
+	uploadsFS := http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads")))
+	r.Handle("/uploads/*", uploadsFS)
 
 	// Serve embedded frontend (SPA fallback)
 	distFS, _ := fs.Sub(web.Assets, "dist")
