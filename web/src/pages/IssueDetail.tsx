@@ -506,7 +506,7 @@ export default function IssueDetail() {
               </div>
             </div>
             <div className="px-4 pb-4">
-              <EventData data={events[0].data} />
+              <EventData data={events[0].data} project={project} />
             </div>
           </div>
         </>
@@ -734,7 +734,7 @@ export default function IssueDetail() {
                     <Copy className="h-3.5 w-3.5 mr-1" /> Copy full
                   </Button>
                 </div>
-                <EventData data={event.data} />
+                <EventData data={event.data} project={project} />
               </div>
             )}
           </div>
@@ -881,7 +881,23 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
   )
 }
 
-function ExceptionSection({ exception }: { exception: { values?: Array<{ type: string; value: string; stacktrace?: { frames?: Array<{ filename: string; function: string; lineno: number; colno?: number; in_app?: boolean }> } }> } }) {
+function buildSourceURL(filename: string, lineno: number, project: Project | null): string | null {
+  if (!project?.repo_provider || !project.repo_owner || !project.repo_name) return null
+  // Skip library paths
+  const lower = filename.toLowerCase()
+  if (['node_modules/', 'vendor/', 'site-packages/', 'lib/python', '.gem/', '/usr/lib/'].some(p => lower.includes(p))) return null
+  const cleanPath = project.repo_path_strip ? filename.replace(project.repo_path_strip, '') : filename
+  const branch = project.repo_default_branch || 'main'
+  if (project.repo_provider === 'github') {
+    return `https://github.com/${project.repo_owner}/${project.repo_name}/blob/${branch}/${cleanPath}#L${lineno}`
+  }
+  if (project.repo_provider === 'bitbucket') {
+    return `https://bitbucket.org/${project.repo_owner}/${project.repo_name}/src/${branch}/${cleanPath}#lines-${lineno}`
+  }
+  return null
+}
+
+function ExceptionSection({ exception, project }: { exception: { values?: Array<{ type: string; value: string; stacktrace?: { frames?: Array<{ filename: string; function: string; lineno: number; colno?: number; in_app?: boolean }> } }> }; project: Project | null }) {
   if (!exception?.values) return null
   return (
     <div className="space-y-4">
@@ -896,7 +912,9 @@ function ExceptionSection({ exception }: { exception: { values?: Array<{ type: s
             <div className="bg-[#0d1117] overflow-x-auto">
               <table className="w-full text-xs font-mono">
                 <tbody>
-                  {[...exc.stacktrace.frames].reverse().map((frame, j) => (
+                  {[...exc.stacktrace.frames].reverse().map((frame, j) => {
+                    const sourceUrl = buildSourceURL(frame.filename, frame.lineno, project)
+                    return (
                     <tr
                       key={j}
                       className={cn(
@@ -910,14 +928,26 @@ function ExceptionSection({ exception }: { exception: { values?: Array<{ type: s
                         {frame.lineno}
                       </td>
                       <td className="px-3 py-1.5">
-                        <span className="text-muted-foreground">{frame.filename}</span>
+                        {sourceUrl ? (
+                          <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                            <span className="text-primary/70">{frame.filename}</span>
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">{frame.filename}</span>
+                        )}
                         <span className="text-muted-foreground/40"> in </span>
                         <span className={frame.in_app ? 'text-primary font-semibold' : 'text-foreground/60'}>
                           {frame.function}
                         </span>
+                        {sourceUrl && (
+                          <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-muted-foreground/30 hover:text-primary/60 transition-colors" title="View in repository">
+                            <ExternalLink className="h-3 w-3 inline" />
+                          </a>
+                        )}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1167,7 +1197,7 @@ function formatEventSummary(data: Record<string, unknown>): string {
   return lines.join('\n')
 }
 
-function EventData({ data }: { data: Record<string, unknown> }) {
+function EventData({ data, project }: { data: Record<string, unknown>; project?: Project | null }) {
   const [activeTab, setActiveTab] = useState('')
   const exception = data.exception as { values?: Array<{ type: string; value: string; stacktrace?: { frames?: Array<{ filename: string; function: string; lineno: number; colno?: number; in_app?: boolean }> } }> } | undefined
   const request = data.request as { method?: string; url?: string; headers?: Record<string, string>; query_string?: string; data?: unknown; env?: Record<string, string> } | undefined
@@ -1217,7 +1247,7 @@ function EventData({ data }: { data: Record<string, unknown> }) {
           </button>
         ))}
       </div>
-      {current === 'stacktrace' && exception && <ExceptionSection exception={exception} />}
+      {current === 'stacktrace' && exception && <ExceptionSection exception={exception} project={project || null} />}
       {current === 'request' && request && <RequestSection request={request} />}
       {current === 'user' && user && <UserSection user={user} />}
       {current === 'context' && contexts && <ContextsSection contexts={contexts} />}

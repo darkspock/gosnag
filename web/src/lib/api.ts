@@ -219,6 +219,12 @@ export const api = {
     return request<ActivityListResponse>(`/projects/${projectId}/issues/${issueId}/activities?${q}`)
   },
 
+  // Source code
+  testRepoConnection: (projectId: string) =>
+    request<{ ok: boolean; error?: string }>(`/projects/${projectId}/repo/test`, { method: 'POST' }),
+  getSuspectCommits: (projectId: string, issueId: string) =>
+    request<{ commits: SuspectCommit[] }>(`/projects/${projectId}/issues/${issueId}/suspect-commits`),
+
   // Uploads
   uploadImage: async (file: File): Promise<string> => {
     const form = new FormData()
@@ -291,6 +297,12 @@ export interface Project {
   github_repo: string
   github_labels: string
   workflow_mode: string
+  repo_provider: string
+  repo_owner: string
+  repo_name: string
+  repo_default_branch: string
+  repo_token_set: boolean
+  repo_path_strip: string
   issue_display_mode: string
   group_id: string | null
   created_at: string
@@ -539,6 +551,16 @@ export interface Activity {
 export interface ActivityListResponse {
   activities: Activity[]
   total: number
+}
+
+export interface SuspectCommit {
+  sha: string
+  message: string
+  author: string
+  email: string
+  timestamp: string
+  url: string
+  files: string[]
 }
 
 export interface AlertConfig {

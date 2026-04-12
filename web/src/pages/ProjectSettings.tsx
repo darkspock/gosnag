@@ -126,6 +126,14 @@ export default function ProjectSettings() {
   const [maxEventsPerIssue, setMaxEventsPerIssue] = useState('1000')
   const [issueDisplayMode, setIssueDisplayMode] = useState('classic')
   const [workflowMode, setWorkflowMode] = useState('simple')
+  const [repoProvider, setRepoProvider] = useState('')
+  const [repoOwner, setRepoOwner] = useState('')
+  const [repoName, setRepoName] = useState('')
+  const [repoDefaultBranch, setRepoDefaultBranch] = useState('main')
+  const [repoToken, setRepoToken] = useState('')
+  const [repoPathStrip, setRepoPathStrip] = useState('')
+  const [repoTesting, setRepoTesting] = useState(false)
+  const [savingRepo, setSavingRepo] = useState(false)
   const [activeSection, setActiveSection] = useState<SettingsSection>('general')
   const [savingGeneral, setSavingGeneral] = useState(false)
   const [savingJira, setSavingJira] = useState(false)
@@ -164,6 +172,12 @@ export default function ProjectSettings() {
     setGithubLabels(p.github_labels || 'bug')
     setIssueDisplayMode(p.issue_display_mode || 'classic')
     setWorkflowMode(p.workflow_mode || 'simple')
+    setRepoProvider(p.repo_provider || '')
+    setRepoOwner(p.repo_owner || '')
+    setRepoName(p.repo_name || '')
+    setRepoDefaultBranch(p.repo_default_branch || 'main')
+    setRepoToken('')
+    setRepoPathStrip(p.repo_path_strip || '')
     setSelectedGroupId(p.group_id || '')
   }
 
@@ -181,6 +195,12 @@ export default function ProjectSettings() {
     max_events_per_issue: parseInt(maxEventsPerIssue) || 0,
     issue_display_mode: issueDisplayMode,
     workflow_mode: workflowMode,
+    repo_provider: repoProvider,
+    repo_owner: repoOwner,
+    repo_name: repoName,
+    repo_default_branch: repoDefaultBranch,
+    repo_token: repoToken,
+    repo_path_strip: repoPathStrip,
     jira_base_url: jiraBaseUrl,
     jira_email: jiraEmail,
     jira_api_token: jiraApiToken,
@@ -239,6 +259,39 @@ export default function ProjectSettings() {
       toast.error(e instanceof Error ? e.message : 'Failed to save Jira settings')
     } finally {
       setSavingJira(false)
+    }
+  }
+
+  const handleSaveRepo = async () => {
+    if (!projectId) return
+    setSavingRepo(true)
+    try {
+      await api.updateProject(projectId, buildProjectPayload())
+      await refreshProject(projectId)
+      toast.success('Repository settings saved')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save')
+    } finally {
+      setSavingRepo(false)
+    }
+  }
+
+  const handleTestRepo = async () => {
+    if (!projectId) return
+    setRepoTesting(true)
+    try {
+      await api.updateProject(projectId, buildProjectPayload())
+      await refreshProject(projectId)
+      const result = await api.testRepoConnection(projectId)
+      if (result.ok) {
+        toast.success('Repository connection successful')
+      } else {
+        toast.error(result.error || 'Connection failed')
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Connection test failed')
+    } finally {
+      setRepoTesting(false)
     }
   }
 
@@ -1575,6 +1628,84 @@ export default function ProjectSettings() {
                       ))}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              <div className="space-y-1 mt-8">
+                <h2 className="text-xl font-semibold">Source Code Repository</h2>
+                <p className="text-sm text-muted-foreground">
+                  Link stack trace frames directly to your source code. Enables clickable links and suspect commit detection.
+                </p>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Repository</CardTitle>
+                  <CardDescription>Connect your source code repository for stack trace linking.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="text-sm font-medium">Provider</label>
+                      <Select value={repoProvider} onChange={e => setRepoProvider(e.target.value)} className="mt-1">
+                        <option value="">Not configured</option>
+                        <option value="github">GitHub</option>
+                        <option value="bitbucket">Bitbucket</option>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Default Branch</label>
+                      <Input value={repoDefaultBranch} onChange={e => setRepoDefaultBranch(e.target.value)} placeholder="main" className="mt-1" />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="text-sm font-medium">{repoProvider === 'bitbucket' ? 'Workspace' : 'Owner'}</label>
+                      <Input value={repoOwner} onChange={e => setRepoOwner(e.target.value)} placeholder="e.g. myorg" className="mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Repository Name</label>
+                      <Input value={repoName} onChange={e => setRepoName(e.target.value)} placeholder="e.g. my-app" className="mt-1" />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="text-sm font-medium">Access Token</label>
+                      <Input
+                        type="password"
+                        value={repoToken}
+                        onChange={e => setRepoToken(e.target.value)}
+                        placeholder={project?.repo_token_set ? '••••••••• (configured)' : 'Token with read access'}
+                        className="mt-1"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Needs read-only access to repository contents.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Path Strip Prefix</label>
+                      <Input value={repoPathStrip} onChange={e => setRepoPathStrip(e.target.value)} placeholder="/var/www/app/" className="mt-1" />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Prefix to remove from runtime file paths to match repo paths.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      {project?.repo_token_set ? 'Repository token is configured.' : 'No repository configured yet.'}
+                    </p>
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                      <Button variant="outline" onClick={handleTestRepo} disabled={repoTesting || !repoProvider || !repoOwner || !repoName}>
+                        {repoTesting ? 'Testing...' : 'Test Connection'}
+                      </Button>
+                      <Button onClick={handleSaveRepo} disabled={savingRepo}>
+                        {savingRepo ? 'Saving...' : 'Save Repository Settings'}
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 

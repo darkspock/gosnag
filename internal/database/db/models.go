@@ -200,6 +200,12 @@ type Project struct {
 	GithubRepo             string        `json:"github_repo"`
 	GithubLabels           string        `json:"github_labels"`
 	WorkflowMode           string        `json:"workflow_mode"`
+	RepoProvider           string        `json:"repo_provider"`
+	RepoOwner              string        `json:"repo_owner"`
+	RepoName               string        `json:"repo_name"`
+	RepoDefaultBranch      string        `json:"repo_default_branch"`
+	RepoToken              string        `json:"repo_token"`
+	RepoPathStrip          string        `json:"repo_path_strip"`
 }
 
 type ProjectFavorite struct {

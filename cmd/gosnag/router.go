@@ -21,6 +21,7 @@ import (
 	"github.com/darkspock/gosnag/internal/github"
 	"github.com/darkspock/gosnag/internal/jira"
 	"github.com/darkspock/gosnag/internal/n1"
+	"github.com/darkspock/gosnag/internal/sourcecode"
 	"github.com/darkspock/gosnag/internal/ticket"
 	"github.com/darkspock/gosnag/internal/upload"
 	"github.com/darkspock/gosnag/internal/priority"
@@ -77,6 +78,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	githubHandler := github.NewHandler(queries, cfg)
 	activityHandler := activitypkg.NewHandler(queries)
 	uploadHandler := upload.NewHandler("uploads", cfg.BaseURL)
+	sourceCodeHandler := sourcecode.NewHandler(queries)
 	priorityHandler := priority.NewHandler(queries)
 	tagsHandler := tags.NewHandler(queries)
 	oauthHandler := auth.NewOAuthHandler(queries, cfg)
@@ -179,6 +181,9 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 
 				// GitHub integration
 				r.With(auth.RequireAdmin).Post("/github/test", githubHandler.TestConnection)
+
+				// Source code repository
+				r.With(auth.RequireAdmin).Post("/repo/test", sourceCodeHandler.TestConnection)
 				r.Route("/github/rules", func(r chi.Router) {
 					r.Get("/", githubHandler.ListRules)
 					r.With(auth.RequireAdmin).Post("/", githubHandler.CreateRule)
@@ -230,6 +235,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 				r.With(auth.RequireWritePermission).Post("/tags", tagsHandler.AddTag)
 				r.With(auth.RequireWritePermission).Delete("/tags", tagsHandler.RemoveTag)
 				r.Get("/activities", activityHandler.List)
+				r.Get("/suspect-commits", sourceCodeHandler.SuspectCommits)
 				r.Get("/ticket", ticketHandler.GetByIssue)
 				r.With(auth.RequireWritePermission).Post("/ticket", ticketHandler.Create)
 				r.With(auth.RequireWritePermission).Post("/jira", jiraHandler.CreateTicket)

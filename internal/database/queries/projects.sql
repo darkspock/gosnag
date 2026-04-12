@@ -24,6 +24,8 @@ SET name = $2, slug = $3, default_cooldown_minutes = $4, warning_as_error = $5,
     issue_display_mode = $14,
     github_token = $15, github_owner = $16, github_repo = $17, github_labels = $18,
     workflow_mode = $19,
+    repo_provider = $20, repo_owner = $21, repo_name = $22,
+    repo_default_branch = $23, repo_token = $24, repo_path_strip = $25,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
