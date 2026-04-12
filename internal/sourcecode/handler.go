@@ -69,6 +69,13 @@ func (h *Handler) SuspectCommits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify issue belongs to this project
+	issue, err := h.queries.GetIssue(r.Context(), issueID)
+	if err != nil || issue.ProjectID != projectID {
+		writeError(w, http.StatusNotFound, "issue not found")
+		return
+	}
+
 	project, err := h.queries.GetProject(r.Context(), projectID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "project not found")

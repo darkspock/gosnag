@@ -187,7 +187,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 
 				// Deploys
 				r.Get("/deploys", sourceCodeHandler.ListDeploys)
-				r.Post("/deploys", sourceCodeHandler.Deploy)
+				r.With(auth.RequireWritePermission).Post("/deploys", sourceCodeHandler.Deploy)
 				r.Route("/github/rules", func(r chi.Router) {
 					r.Get("/", githubHandler.ListRules)
 					r.With(auth.RequireAdmin).Post("/", githubHandler.CreateRule)
@@ -283,9 +283,8 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 		r.Post("/", uploadHandler.Upload)
 	})
 
-	// Serve uploaded files
-	uploadsFS := http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads")))
-	r.Handle("/uploads/*", uploadsFS)
+	// Serve uploaded files with safe headers
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", upload.ServeUploads("uploads")))
 
 	// Serve embedded frontend (SPA fallback)
 	distFS, _ := fs.Sub(web.Assets, "dist")

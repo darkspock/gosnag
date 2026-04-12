@@ -78,18 +78,21 @@ export default function TicketDetail() {
       api.getProject(projectId).then(setProject),
       api.getTicket(projectId, ticketId).then(async t => {
         setTicket(t)
-        try {
-          const issue = await api.getIssue(projectId, t.issue_id)
-          setIssueTitle(issue.title)
-          setIssueCulprit(issue.culprit || '')
-          setIssueLevel(issue.level || '')
-          setIssueEventCount(issue.event_count || 0)
-          setIssueFirstSeen(issue.first_seen || '')
-          setIssueLastSeen(issue.last_seen || '')
-          api.listActivities(projectId, t.issue_id, { limit: 100 }).then(r => setActivities(r.activities)).catch(() => {})
-          api.listComments(projectId, t.issue_id).then(setComments).catch(() => {})
-          api.getSuspectCommits(projectId, t.issue_id).then(r => setSuspectCommits(r.commits || [])).catch(() => {})
-        } catch { /* */ }
+        // Only fetch issue-related data if ticket has a linked issue
+        if (t.issue_id) {
+          try {
+            const issue = await api.getIssue(projectId, t.issue_id)
+            setIssueTitle(issue.title)
+            setIssueCulprit(issue.culprit || '')
+            setIssueLevel(issue.level || '')
+            setIssueEventCount(issue.event_count || 0)
+            setIssueFirstSeen(issue.first_seen || '')
+            setIssueLastSeen(issue.last_seen || '')
+            api.listActivities(projectId, t.issue_id, { limit: 100 }).then(r => setActivities(r.activities)).catch(() => {})
+            api.listComments(projectId, t.issue_id).then(setComments).catch(() => {})
+            api.getSuspectCommits(projectId, t.issue_id).then(r => setSuspectCommits(r.commits || [])).catch(() => {})
+          } catch { /* */ }
+        }
         api.getTicketTransitions(projectId, ticketId).then(r => setTransitions(r.transitions)).catch(() => {})
       }),
       api.listUsers().then(setUsers),
@@ -475,8 +478,8 @@ export default function TicketDetail() {
               </div>
             </div>
 
-            {/* Add comment */}
-            <div className="relative pl-9 pt-3">
+            {/* Add comment (only for tickets with a linked issue) */}
+            {ticket.issue_id && <div className="relative pl-9 pt-3">
               <div className="absolute left-1 top-4">
                 {currentUser?.avatar_url ? (
                   <img src={currentUser.avatar_url} alt="" className="h-5 w-5 rounded-full ring-2 ring-background" />
@@ -503,7 +506,7 @@ export default function TicketDetail() {
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
-            </div>
+            </div>}
           </div>
         </div>
 
@@ -608,13 +611,15 @@ export default function TicketDetail() {
                 </div>
               </div>
 
-              <Link
-                to={`/projects/${projectId}/issues/${ticket.issue_id}`}
-                className="flex items-center gap-1.5 text-xs text-primary hover:underline pt-2 border-t"
-              >
-                <ArrowUpRight className="h-3 w-3" />
-                View issue details
-              </Link>
+              {ticket.issue_id && (
+                <Link
+                  to={`/projects/${projectId}/issues/${ticket.issue_id}`}
+                  className="flex items-center gap-1.5 text-xs text-primary hover:underline pt-2 border-t"
+                >
+                  <ArrowUpRight className="h-3 w-3" />
+                  View issue details
+                </Link>
+              )}
             </div>
           </div>
         </div>

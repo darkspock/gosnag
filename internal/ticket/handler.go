@@ -402,7 +402,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			// When ticket is reopened (done/wontfix -> acknowledged), reopen the linked issue
 			if (current.Status == workflow.StatusDone || current.Status == workflow.StatusWontfix) && status == workflow.StatusAcknowledged {
 				issue, err := h.queries.GetIssue(r.Context(), ticket.IssueID.UUID)
-				if err == nil && issue.Status == "resolved" {
+				if err == nil && (issue.Status == "resolved" || issue.Status == "ignored") {
 					h.queries.UpdateIssueStatus(r.Context(), db.UpdateIssueStatusParams{
 						ID:     ticket.IssueID.UUID,
 						Status: "reopened",
