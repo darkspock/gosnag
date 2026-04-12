@@ -28,7 +28,7 @@ type SentryEvent struct {
 	User        map[string]any         `json:"user"`
 	Request     map[string]any         `json:"request"`
 	Contexts    map[string]any         `json:"contexts"`
-	Breadcrumbs map[string]any         `json:"breadcrumbs"`
+	Breadcrumbs json.RawMessage         `json:"breadcrumbs"`
 	SDK         map[string]any         `json:"sdk"`
 	Modules     map[string]string      `json:"modules"`
 	Raw         map[string]any         `json:"-"` // full raw event for storage

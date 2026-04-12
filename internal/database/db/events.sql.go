@@ -26,6 +26,64 @@ func (q *Queries) CountEventsByIssue(ctx context.Context, issueID uuid.UUID) (in
 	return count, err
 }
 
+const countEventsInWindow = `-- name: CountEventsInWindow :one
+SELECT count(*) FROM events WHERE project_id = $1 AND timestamp >= $2 AND timestamp < $3
+`
+
+type CountEventsInWindowParams struct {
+	ProjectID   uuid.UUID `json:"project_id"`
+	Timestamp   time.Time `json:"timestamp"`
+	Timestamp_2 time.Time `json:"timestamp_2"`
+}
+
+func (q *Queries) CountEventsInWindow(ctx context.Context, arg CountEventsInWindowParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countEventsInWindow, arg.ProjectID, arg.Timestamp, arg.Timestamp_2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countEventsPerIssueInWindow = `-- name: CountEventsPerIssueInWindow :many
+SELECT issue_id, count(*)::int as event_count
+FROM events
+WHERE project_id = $1 AND timestamp >= $2 AND timestamp < $3
+GROUP BY issue_id
+`
+
+type CountEventsPerIssueInWindowParams struct {
+	ProjectID   uuid.UUID `json:"project_id"`
+	Timestamp   time.Time `json:"timestamp"`
+	Timestamp_2 time.Time `json:"timestamp_2"`
+}
+
+type CountEventsPerIssueInWindowRow struct {
+	IssueID    uuid.UUID `json:"issue_id"`
+	EventCount int32     `json:"event_count"`
+}
+
+func (q *Queries) CountEventsPerIssueInWindow(ctx context.Context, arg CountEventsPerIssueInWindowParams) ([]CountEventsPerIssueInWindowRow, error) {
+	rows, err := q.db.QueryContext(ctx, countEventsPerIssueInWindow, arg.ProjectID, arg.Timestamp, arg.Timestamp_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountEventsPerIssueInWindowRow{}
+	for rows.Next() {
+		var i CountEventsPerIssueInWindowRow
+		if err := rows.Scan(&i.IssueID, &i.EventCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createEvent = `-- name: CreateEvent :one
 INSERT INTO events (issue_id, project_id, event_id, timestamp, platform, level, message, release, environment, server_name, data, user_identifier)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
@@ -167,6 +225,35 @@ func (q *Queries) GetIssueUserCount(ctx context.Context, issueID uuid.UUID) (int
 	var user_count int32
 	err := row.Scan(&user_count)
 	return user_count, err
+}
+
+const getLatestEventByIssue = `-- name: GetLatestEventByIssue :one
+SELECT id, issue_id, project_id, event_id, timestamp, platform, level, message, release, environment, server_name, data, created_at, user_identifier FROM events
+WHERE issue_id = $1
+ORDER BY timestamp DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestEventByIssue(ctx context.Context, issueID uuid.UUID) (Event, error) {
+	row := q.db.QueryRowContext(ctx, getLatestEventByIssue, issueID)
+	var i Event
+	err := row.Scan(
+		&i.ID,
+		&i.IssueID,
+		&i.ProjectID,
+		&i.EventID,
+		&i.Timestamp,
+		&i.Platform,
+		&i.Level,
+		&i.Message,
+		&i.Release,
+		&i.Environment,
+		&i.ServerName,
+		&i.Data,
+		&i.CreatedAt,
+		&i.UserIdentifier,
+	)
+	return i, err
 }
 
 const getUniqueUserCountsByIssues = `-- name: GetUniqueUserCountsByIssues :many

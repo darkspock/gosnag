@@ -13,6 +13,7 @@ import (
 	"time"
 
 	activitypkg "github.com/darkspock/gosnag/internal/activity"
+	aipkg "github.com/darkspock/gosnag/internal/ai"
 	"github.com/darkspock/gosnag/internal/alert"
 	"github.com/darkspock/gosnag/internal/comment"
 	"github.com/darkspock/gosnag/internal/auth"
@@ -105,6 +106,9 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	priorityHandler := priority.NewHandler(queries)
 	tagsHandler := tags.NewHandler(queries)
 	oauthHandler := auth.NewOAuthHandler(queries, cfg)
+
+	aiService := aipkg.NewService(queries, cfg)
+	aiHandler := aipkg.NewHandler(queries, aiService, cfg)
 
 	alertService := alert.NewService(queries, cfg)
 
@@ -208,9 +212,15 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 				// Source code repository
 				r.With(auth.RequireAdmin).Post("/repo/test", sourceCodeHandler.TestConnection)
 
+				// AI
+				r.Get("/ai/status", aiHandler.GetAIStatus)
+				r.Get("/ai/usage", aiHandler.GetTokenUsage)
+
 				// Deploys
 				r.Get("/deploys", sourceCodeHandler.ListDeploys)
 				r.With(auth.RequireWritePermission).Post("/deploys", sourceCodeHandler.Deploy)
+				r.Get("/deploys/{deploy_id}/analysis", aiHandler.GetDeployAnalysis)
+				r.Get("/deploy-health", aiHandler.GetLatestDeployHealth)
 				r.Route("/github/rules", func(r chi.Router) {
 					r.Get("/", githubHandler.ListRules)
 					r.With(auth.RequireAdmin).Post("/", githubHandler.CreateRule)
@@ -264,6 +274,12 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 				r.Get("/activities", activityHandler.List)
 				r.Get("/suspect-commits", sourceCodeHandler.SuspectCommits)
 				r.Get("/release-info", sourceCodeHandler.GetReleaseInfo)
+				r.Get("/merge-suggestion", aiHandler.GetMergeSuggestion)
+				r.With(auth.RequireWritePermission).Post("/merge-suggestion/accept", aiHandler.AcceptMergeSuggestion)
+				r.With(auth.RequireWritePermission).Post("/merge-suggestion/dismiss", aiHandler.DismissMergeSuggestion)
+				r.With(auth.RequireWritePermission).Post("/analyze", aiHandler.AnalyzeIssue)
+				r.Get("/analysis", aiHandler.GetAnalysis)
+				r.Get("/analyses", aiHandler.ListAnalyses)
 				r.Get("/ticket", ticketHandler.GetByIssue)
 				r.With(auth.RequireWritePermission).Post("/ticket", ticketHandler.Create)
 				r.With(auth.RequireWritePermission).Post("/jira", jiraHandler.CreateTicket)
@@ -291,6 +307,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 				r.Get("/attachments", ticketHandler.ListAttachments)
 				r.With(auth.RequireWritePermission).Post("/attachments", ticketHandler.AddAttachment)
 				r.With(auth.RequireWritePermission).Delete("/attachments/{attachment_id}", ticketHandler.DeleteAttachment)
+				r.With(auth.RequireWritePermission).Post("/generate-description", aiHandler.GenerateTicketDescription)
 			})
 		})
 

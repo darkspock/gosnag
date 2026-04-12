@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Check, ExternalLink, ArrowUpRight, Pencil, Send, ChevronRight, AlertTriangle, FileText, Image as ImageIcon, X, Upload } from 'lucide-react'
+import { Check, ExternalLink, ArrowUpRight, Pencil, Send, ChevronRight, AlertTriangle, FileText, Image as ImageIcon, X, Upload, Sparkles } from 'lucide-react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { RichEditor, RichViewer } from '@/components/ui/rich-editor'
@@ -68,6 +68,7 @@ export default function TicketDetail() {
   const [suspectCommits, setSuspectCommits] = useState<SuspectCommit[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [uploading, setUploading] = useState(false)
+  const [generatingDescription, setGeneratingDescription] = useState(false)
 
   const [showResolution, setShowResolution] = useState(false)
   const [resolutionType, setResolutionType] = useState('fixed')
@@ -197,6 +198,22 @@ export default function TicketDetail() {
       toast.success('Description saved')
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to save description')
+    }
+  }
+
+  const handleGenerateDescription = async () => {
+    if (!projectId || !ticketId) return
+    setGeneratingDescription(true)
+    try {
+      const result = await api.generateDescription(projectId, ticketId)
+      const updated = await api.updateTicket(projectId, ticketId, { description: result.description })
+      setTicket(updated)
+      toast.success('AI description generated')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to generate description'
+      toast.error(msg)
+    } finally {
+      setGeneratingDescription(false)
     }
   }
 
@@ -366,14 +383,27 @@ export default function TicketDetail() {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">Description</h3>
-              {!editingDescription && (
-                <button
-                  onClick={() => { setDescriptionDraft(ticket.description || ''); setEditingDescription(true) }}
-                  className="text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {!editingDescription && project?.ai_enabled && project?.ai_ticket_description && (
+                  <button
+                    onClick={handleGenerateDescription}
+                    disabled={generatingDescription}
+                    className="flex items-center gap-1 text-xs text-primary/60 hover:text-primary transition-colors disabled:opacity-50"
+                    title="Generate description with AI"
+                  >
+                    <Sparkles className={cn('h-3 w-3', generatingDescription && 'animate-pulse')} />
+                    {generatingDescription ? 'Generating...' : 'AI'}
+                  </button>
+                )}
+                {!editingDescription && (
+                  <button
+                    onClick={() => { setDescriptionDraft(ticket.description || ''); setEditingDescription(true) }}
+                    className="text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
             {editingDescription ? (
               <div>

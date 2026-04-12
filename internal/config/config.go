@@ -48,10 +48,20 @@ type Config struct {
 	IngestRateLimitPerMin int
 
 	// Uploads - S3 (if UPLOAD_S3_BUCKET is set, use S3; otherwise local disk)
-	UploadS3Bucket    string
-	UploadS3Region    string
-	UploadS3Prefix    string
-	UploadS3CDNURL    string
+	UploadS3Bucket string
+	UploadS3Region string
+	UploadS3Prefix string
+	UploadS3CDNURL string
+
+	// AI Integration
+	AIProvider       string // "openai", "groq", "bedrock", "claude", "ollama"
+	AIAPIKey         string
+	AIModel          string
+	AIBaseURL        string
+	AIBedrockRegion  string
+	AIBedrockModelID string
+	AIMaxTokensPerDay   int
+	AIMaxCallsPerMinute int
 }
 
 func Load() (*Config, error) {
@@ -97,6 +107,15 @@ func Load() (*Config, error) {
 		UploadS3Region: getEnv("UPLOAD_S3_REGION", getEnv("AWS_REGION", "eu-west-1")),
 		UploadS3Prefix: getEnv("UPLOAD_S3_PREFIX", "uploads/"),
 		UploadS3CDNURL: getEnv("UPLOAD_S3_CDN_URL", ""),
+
+		AIProvider:          getEnv("AI_PROVIDER", ""),
+		AIAPIKey:            getEnv("AI_API_KEY", ""),
+		AIModel:             getEnv("AI_MODEL", ""),
+		AIBaseURL:           getEnv("AI_BASE_URL", ""),
+		AIBedrockRegion:     getEnv("AI_BEDROCK_REGION", getEnv("AWS_REGION", "eu-west-1")),
+		AIBedrockModelID:    getEnv("AI_BEDROCK_MODEL_ID", ""),
+		AIMaxTokensPerDay:   getEnvInt("AI_MAX_TOKENS_PER_DAY", 100000),
+		AIMaxCallsPerMinute: getEnvInt("AI_MAX_CALLS_PER_MINUTE", 10),
 	}, nil
 }
 

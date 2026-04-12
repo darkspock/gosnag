@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, type ProjectWithDSN, type AlertConfig, type APIToken, type JiraRule, type GithubRule, type ProjectGroup, type PriorityRule, type TagRule } from '@/lib/api'
+import { api, type ProjectWithDSN, type AlertConfig, type APIToken, type JiraRule, type GithubRule, type ProjectGroup, type PriorityRule, type TagRule, type AIUsage } from '@/lib/api'
 import { useAuth } from '@/lib/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
-import { Bell, Copy, Gauge, Key, Pencil, Plus, Settings, ShieldAlert, Tag, Trash2, Workflow } from 'lucide-react'
+import { Bell, Brain, Copy, Gauge, Key, Pencil, Plus, Settings, ShieldAlert, Tag, Trash2, Workflow } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
 import { ConditionBuilder, type ConditionGroup, type ConditionNode } from '@/components/ui/condition-builder'
@@ -48,7 +48,7 @@ const LEVEL_COLORS: Record<string, string> = {
   debug: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
 }
 
-type SettingsSection = 'general' | 'alerts' | 'tokens' | 'priority' | 'tags' | 'integrations' | 'danger'
+type SettingsSection = 'general' | 'alerts' | 'tokens' | 'priority' | 'tags' | 'ai' | 'integrations' | 'danger'
 
 export default function ProjectSettings() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -119,6 +119,17 @@ export default function ProjectSettings() {
   const [showDeleteTagRule, setShowDeleteTagRule] = useState<string | null>(null)
   const [allGroups, setAllGroups] = useState<ProjectGroup[]>([])
   const [selectedGroupId, setSelectedGroupId] = useState<string>('')
+  // AI state
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [aiModel, setAiModel] = useState('')
+  const [aiMergeSuggestions, setAiMergeSuggestions] = useState(false)
+  const [aiAutoMerge, setAiAutoMerge] = useState(false)
+  const [aiTicketDescription, setAiTicketDescription] = useState(true)
+  const [aiRootCause, setAiRootCause] = useState(false)
+  const [aiProviderConfigured, setAiProviderConfigured] = useState(false)
+  const [aiProviderName, setAiProviderName] = useState('')
+  const [aiUsage, setAiUsage] = useState<AIUsage | null>(null)
+  const [savingAI, setSavingAI] = useState(false)
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [defaultCooldown, setDefaultCooldown] = useState('60')
@@ -179,6 +190,12 @@ export default function ProjectSettings() {
     setRepoToken('')
     setRepoPathStrip(p.repo_path_strip || '')
     setSelectedGroupId(p.group_id || '')
+    setAiEnabled(p.ai_enabled)
+    setAiModel(p.ai_model || '')
+    setAiMergeSuggestions(p.ai_merge_suggestions)
+    setAiAutoMerge(p.ai_auto_merge)
+    setAiTicketDescription(p.ai_ticket_description)
+    setAiRootCause(p.ai_root_cause)
   }
 
   const refreshProject = async (id: string) => {
@@ -211,6 +228,12 @@ export default function ProjectSettings() {
     github_repo: githubRepo,
     github_labels: githubLabels,
     group_id: selectedGroupId || null,
+    ai_enabled: aiEnabled,
+    ai_model: aiModel,
+    ai_merge_suggestions: aiMergeSuggestions,
+    ai_auto_merge: aiAutoMerge,
+    ai_ticket_description: aiTicketDescription,
+    ai_root_cause: aiRootCause,
   })
 
   useEffect(() => {
@@ -224,6 +247,8 @@ export default function ProjectSettings() {
       api.listGroups().then(setAllGroups),
       api.listPriorityRules(projectId).then(setPriorityRules),
       api.listTagRules(projectId).then(setTagRules),
+      api.getAIStatus(projectId).then(s => { setAiProviderConfigured(s.provider_configured); setAiProviderName(s.provider) }).catch(() => {}),
+      api.getAIUsage(projectId).then(setAiUsage).catch(() => {}),
     ]).finally(() => setLoading(false))
   }, [projectId])
 
@@ -306,6 +331,22 @@ export default function ProjectSettings() {
       toast.error(e instanceof Error ? e.message : 'Failed to save GitHub settings')
     } finally {
       setSavingGithub(false)
+    }
+  }
+
+  const handleSaveAI = async () => {
+    if (!projectId) return
+    setSavingAI(true)
+    try {
+      await api.updateProject(projectId, buildProjectPayload())
+      await refreshProject(projectId)
+      const usage = await api.getAIUsage(projectId).catch(() => null)
+      if (usage) setAiUsage(usage)
+      toast.success('AI settings saved')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save AI settings')
+    } finally {
+      setSavingAI(false)
     }
   }
 
@@ -784,6 +825,16 @@ export default function ProjectSettings() {
       badge: `${tagRules.length}`,
       icon: Tag,
     },
+    ...(aiProviderConfigured
+      ? [
+          {
+            id: 'ai' as const,
+            label: 'AI',
+            badge: aiEnabled ? 'On' : 'Off',
+            icon: Brain,
+          },
+        ]
+      : []),
     ...(isAdmin
       ? [
           {
@@ -1479,6 +1530,146 @@ export default function ProjectSettings() {
                 variant="destructive"
                 onConfirm={() => { if (showDeleteTagRule) handleDeleteTagRule(showDeleteTagRule) }}
               />
+            </>
+          )}
+
+          {activeSection === 'ai' && aiProviderConfigured && (
+            <>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">AI Integration</p>
+                <h2 className="text-xl font-semibold">AI Features</h2>
+                <p className="text-sm text-muted-foreground">
+                  Configure AI-powered features for this project. Provider: <span className="font-medium text-foreground">{aiProviderName || 'Unknown'}</span>
+                </p>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Master Toggle</CardTitle>
+                  <CardDescription>Enable or disable all AI features for this project.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aiEnabled}
+                      onChange={e => setAiEnabled(e.target.checked)}
+                      className="h-4 w-4 rounded border-border accent-primary"
+                    />
+                    <span className="text-sm font-medium">Enable AI for this project</span>
+                  </label>
+                </CardContent>
+              </Card>
+
+              {aiEnabled && (
+                <>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Feature Toggles</CardTitle>
+                      <CardDescription>Choose which AI features are active.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={aiTicketDescription}
+                          onChange={e => setAiTicketDescription(e.target.checked)}
+                          className="h-4 w-4 rounded border-border accent-primary"
+                        />
+                        <div>
+                          <span className="text-sm font-medium">Ticket Description Generation</span>
+                          <p className="text-xs text-muted-foreground">Generate structured descriptions when creating tickets from issues.</p>
+                        </div>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={aiMergeSuggestions}
+                          onChange={e => setAiMergeSuggestions(e.target.checked)}
+                          className="h-4 w-4 rounded border-border accent-primary"
+                        />
+                        <div>
+                          <span className="text-sm font-medium">Merge Suggestions</span>
+                          <p className="text-xs text-muted-foreground">Suggest duplicate issues that could be merged (runs every 5 minutes).</p>
+                        </div>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={aiRootCause}
+                          onChange={e => setAiRootCause(e.target.checked)}
+                          className="h-4 w-4 rounded border-border accent-primary"
+                        />
+                        <div>
+                          <span className="text-sm font-medium">Root Cause Analysis</span>
+                          <p className="text-xs text-muted-foreground">AI-generated root cause analysis for issues (Phase 2).</p>
+                        </div>
+                      </label>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Model Override</CardTitle>
+                      <CardDescription>Leave empty to use the server default model.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Input
+                        value={aiModel}
+                        onChange={e => setAiModel(e.target.value)}
+                        placeholder="e.g. gpt-4o, llama-3.1-70b-versatile"
+                      />
+                    </CardContent>
+                  </Card>
+
+                  {aiUsage && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Token Usage</CardTitle>
+                        <CardDescription>AI token consumption for this project.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Today</p>
+                            <p className="text-lg font-semibold">{aiUsage.today_tokens.toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">{aiUsage.today_calls} calls</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">This Week</p>
+                            <p className="text-lg font-semibold">{aiUsage.week_tokens.toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">{aiUsage.week_calls} calls</p>
+                          </div>
+                        </div>
+                        {aiUsage.daily_budget > 0 && (
+                          <div className="mt-4">
+                            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                              <span>Daily budget</span>
+                              <span>{aiUsage.today_tokens.toLocaleString()} / {aiUsage.daily_budget.toLocaleString()}</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={cn(
+                                  'h-full rounded-full transition-all',
+                                  aiUsage.today_tokens / aiUsage.daily_budget > 0.9 ? 'bg-red-500' :
+                                  aiUsage.today_tokens / aiUsage.daily_budget > 0.7 ? 'bg-amber-500' : 'bg-primary'
+                                )}
+                                style={{ width: `${Math.min(100, (aiUsage.today_tokens / aiUsage.daily_budget) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              )}
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveAI} disabled={savingAI}>
+                  {savingAI ? 'Saving...' : 'Save AI Settings'}
+                </Button>
+              </div>
             </>
           )}
 

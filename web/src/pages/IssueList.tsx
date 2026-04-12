@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { api, type Issue, type Project, type IssueCounts } from '@/lib/api'
+import { api, type Issue, type Project, type IssueCounts, type DeployAnalysis } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { ChevronLeft, ChevronRight, ChevronDown, Settings, Trash2, Filter, Search, List, AlignLeft, Bookmark, LayoutGrid, Ticket } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, Settings, Trash2, Filter, Search, List, AlignLeft, Bookmark, LayoutGrid, Ticket, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
 import { IssueListSkeleton } from '@/components/ui/skeleton'
@@ -92,6 +92,7 @@ export default function IssueList() {
   const [showMerge, setShowMerge] = useState(false)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [releases, setReleases] = useState<string[]>([])
+  const [deployHealth, setDeployHealth] = useState<DeployAnalysis | null>(null)
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -141,6 +142,7 @@ export default function IssueList() {
       }
     })
     api.listIssueReleases(projectId).then(setReleases).catch(() => {})
+    api.getDeployHealth(projectId).then(r => setDeployHealth(r.analysis)).catch(() => {})
   }, [projectId])
 
   useEffect(() => {
@@ -339,6 +341,38 @@ export default function IssueList() {
         { label: 'Projects', to: '/' },
         { label: project?.name || '' },
       ]} />
+
+      {deployHealth && (
+        <div className={cn(
+          'mb-4 rounded-lg border p-4 flex items-start gap-3',
+          deployHealth.severity === 'critical'
+            ? 'border-red-500/40 bg-red-500/10'
+            : 'border-amber-500/40 bg-amber-500/10'
+        )}>
+          <AlertTriangle className={cn(
+            'h-5 w-5 shrink-0 mt-0.5',
+            deployHealth.severity === 'critical' ? 'text-red-400' : 'text-amber-400'
+          )} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">
+              Deploy Health: <span className="uppercase">{deployHealth.severity}</span>
+            </p>
+            <p className="text-sm text-muted-foreground mt-0.5">{deployHealth.summary}</p>
+            {deployHealth.recommended_action && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Recommended: <span className="font-medium">{deployHealth.recommended_action}</span>
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => setDeployHealth(null)}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <span className="sr-only">Dismiss</span>
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* Mobile Filter Sheet */}
       <Sheet open={showMobileFilters} onOpenChange={setShowMobileFilters}>

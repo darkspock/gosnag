@@ -277,6 +277,30 @@ export const api = {
   deleteAlert: (projectId: string, alertId: string) =>
     request<void>(`/projects/${projectId}/alerts/${alertId}`, { method: 'DELETE' }),
 
+  // AI
+  getAIStatus: (projectId: string) =>
+    request<{ provider_configured: boolean; provider: string }>(`/projects/${projectId}/ai/status`),
+  getAIUsage: (projectId: string) =>
+    request<AIUsage>(`/projects/${projectId}/ai/usage`),
+  generateDescription: (projectId: string, ticketId: string) =>
+    request<{ description: string }>(`/projects/${projectId}/tickets/${ticketId}/generate-description`, { method: 'POST' }),
+  getMergeSuggestion: (projectId: string, issueId: string) =>
+    request<{ suggestion: MergeSuggestion | null }>(`/projects/${projectId}/issues/${issueId}/merge-suggestion`),
+  acceptMergeSuggestion: (projectId: string, issueId: string) =>
+    request<{ status: string }>(`/projects/${projectId}/issues/${issueId}/merge-suggestion/accept`, { method: 'POST' }),
+  dismissMergeSuggestion: (projectId: string, issueId: string) =>
+    request<{ status: string }>(`/projects/${projectId}/issues/${issueId}/merge-suggestion/dismiss`, { method: 'POST' }),
+  analyzeIssue: (projectId: string, issueId: string) =>
+    request<AIAnalysis>(`/projects/${projectId}/issues/${issueId}/analyze`, { method: 'POST' }),
+  getAnalysis: (projectId: string, issueId: string) =>
+    request<{ analysis: AIAnalysis | null }>(`/projects/${projectId}/issues/${issueId}/analysis`),
+  listAnalyses: (projectId: string, issueId: string) =>
+    request<{ analyses: AIAnalysis[] }>(`/projects/${projectId}/issues/${issueId}/analyses`),
+  getDeployHealth: (projectId: string) =>
+    request<{ analysis: DeployAnalysis | null }>(`/projects/${projectId}/deploy-health`),
+  getDeployAnalysis: (projectId: string, deployId: string) =>
+    request<{ analysis: DeployAnalysis | null }>(`/projects/${projectId}/deploys/${deployId}/analysis`),
+
   // Global tokens
   listGlobalTokens: () => request<any[]>('/tokens'),
   createGlobalToken: (data: { name: string; permission: string; expires_in?: number }) =>
@@ -332,6 +356,14 @@ export interface Project {
   repo_path_strip: string
   issue_display_mode: string
   group_id: string | null
+  ai_enabled: boolean
+  ai_model: string
+  ai_merge_suggestions: boolean
+  ai_auto_merge: boolean
+  ai_anomaly_detection: boolean
+  ai_ticket_description: boolean
+  ai_root_cause: boolean
+  ai_triage: boolean
   created_at: string
   total_issues?: number
   open_issues?: number
@@ -635,5 +667,51 @@ export interface AlertConfig {
   min_velocity_1h: number
   exclude_pattern: string
   conditions: object | null
+  created_at: string
+}
+
+export interface MergeSuggestion {
+  id: string
+  issue_id: string
+  target_issue_id: string
+  target_issue_title: string
+  confidence: number
+  reason: string
+  status: string
+  created_at: string
+}
+
+export interface AIUsage {
+  today_tokens: number
+  today_calls: number
+  week_tokens: number
+  week_calls: number
+  daily_budget: number
+}
+
+export interface AIAnalysis {
+  id: string
+  issue_id: string
+  project_id: string
+  summary: string
+  evidence: string[]
+  suggested_fix: string
+  model: string
+  version: number
+  created_at: string
+}
+
+export interface DeployAnalysis {
+  id: string
+  deploy_id: string
+  project_id: string
+  severity: string
+  summary: string
+  details: string
+  likely_deploy_caused: boolean
+  recommended_action: string
+  new_issues_count: number
+  spiked_issues_count: number
+  reopened_issues_count: number
   created_at: string
 }

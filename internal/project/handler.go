@@ -50,6 +50,14 @@ type CreateProjectRequest struct {
 	RepoToken              string  `json:"repo_token"`
 	RepoPathStrip          string  `json:"repo_path_strip"`
 	GroupID                *string `json:"group_id,omitempty"`
+	AIEnabled              *bool   `json:"ai_enabled,omitempty"`
+	AIModel                string  `json:"ai_model"`
+	AIMergeSuggestions     *bool   `json:"ai_merge_suggestions,omitempty"`
+	AIAutoMerge            *bool   `json:"ai_auto_merge,omitempty"`
+	AIAnomalyDetection     *bool   `json:"ai_anomaly_detection,omitempty"`
+	AITicketDescription    *bool   `json:"ai_ticket_description,omitempty"`
+	AIRootCause            *bool   `json:"ai_root_cause,omitempty"`
+	AITriage               *bool   `json:"ai_triage,omitempty"`
 }
 
 // SafeProject strips sensitive fields (Jira API token) from the project for API responses.
@@ -82,8 +90,16 @@ type SafeProject struct {
 	RepoPathStrip          string    `json:"repo_path_strip"`
 	IssueDisplayMode       string    `json:"issue_display_mode"`
 	GroupID                *string   `json:"group_id"`
-	CreatedAt              time.Time     `json:"created_at"`
-	UpdatedAt              time.Time     `json:"updated_at"`
+	AIEnabled              bool      `json:"ai_enabled"`
+	AIModel                string    `json:"ai_model"`
+	AIMergeSuggestions     bool      `json:"ai_merge_suggestions"`
+	AIAutoMerge            bool      `json:"ai_auto_merge"`
+	AIAnomalyDetection     bool      `json:"ai_anomaly_detection"`
+	AITicketDescription    bool      `json:"ai_ticket_description"`
+	AIRootCause            bool      `json:"ai_root_cause"`
+	AITriage               bool      `json:"ai_triage"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
 }
 
 func nullUUIDToStringPtr(u uuid.NullUUID) *string {
@@ -124,6 +140,14 @@ func toSafeProject(p db.Project) SafeProject {
 		RepoPathStrip:          p.RepoPathStrip,
 		IssueDisplayMode:       p.IssueDisplayMode,
 		GroupID:                nullUUIDToStringPtr(p.GroupID),
+		AIEnabled:              p.AiEnabled,
+		AIModel:                p.AiModel,
+		AIMergeSuggestions:     p.AiMergeSuggestions,
+		AIAutoMerge:            p.AiAutoMerge,
+		AIAnomalyDetection:     p.AiAnomalyDetection,
+		AITicketDescription:    p.AiTicketDescription,
+		AIRootCause:            p.AiRootCause,
+		AITriage:               p.AiTriage,
 		CreatedAt:              p.CreatedAt,
 		UpdatedAt:              p.UpdatedAt,
 	}
@@ -390,6 +414,39 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		issueDisplayMode = req.IssueDisplayMode
 	}
 
+	aiEnabled := existing.AiEnabled
+	if req.AIEnabled != nil {
+		aiEnabled = *req.AIEnabled
+	}
+	aiModel := req.AIModel
+	if aiModel == "" {
+		aiModel = existing.AiModel
+	}
+	aiMergeSuggestions := existing.AiMergeSuggestions
+	if req.AIMergeSuggestions != nil {
+		aiMergeSuggestions = *req.AIMergeSuggestions
+	}
+	aiAutoMerge := existing.AiAutoMerge
+	if req.AIAutoMerge != nil {
+		aiAutoMerge = *req.AIAutoMerge
+	}
+	aiAnomalyDetection := existing.AiAnomalyDetection
+	if req.AIAnomalyDetection != nil {
+		aiAnomalyDetection = *req.AIAnomalyDetection
+	}
+	aiTicketDescription := existing.AiTicketDescription
+	if req.AITicketDescription != nil {
+		aiTicketDescription = *req.AITicketDescription
+	}
+	aiRootCause := existing.AiRootCause
+	if req.AIRootCause != nil {
+		aiRootCause = *req.AIRootCause
+	}
+	aiTriage := existing.AiTriage
+	if req.AITriage != nil {
+		aiTriage = *req.AITriage
+	}
+
 	project, err := h.queries.UpdateProject(r.Context(), db.UpdateProjectParams{
 		ID:                     id,
 		Name:                   name,
@@ -416,6 +473,14 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		RepoDefaultBranch:      repoDefaultBranch,
 		RepoToken:              repoToken,
 		RepoPathStrip:          repoPathStrip,
+		AiEnabled:              aiEnabled,
+		AiModel:                aiModel,
+		AiMergeSuggestions:     aiMergeSuggestions,
+		AiAutoMerge:            aiAutoMerge,
+		AiAnomalyDetection:     aiAnomalyDetection,
+		AiTicketDescription:    aiTicketDescription,
+		AiRootCause:            aiRootCause,
+		AiTriage:               aiTriage,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {

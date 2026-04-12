@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	aipkg "github.com/darkspock/gosnag/internal/ai"
 	"github.com/darkspock/gosnag/internal/config"
 	"github.com/darkspock/gosnag/internal/database"
 	dbpkg "github.com/darkspock/gosnag/internal/database/db"
@@ -54,6 +55,19 @@ func main() {
 	go n1Detector.Run(ctx, 10*time.Minute)
 	if cfg.EventRetentionDays > 0 {
 		go eventRetention(ctx, queries, cfg.EventRetentionDays, 6*time.Hour)
+	}
+
+	// AI background workers
+	if aipkg.IsConfigured(cfg) {
+		aiService := aipkg.NewService(queries, cfg)
+		if aiService != nil {
+			mergeChecker := aipkg.NewMergeChecker(queries, aiService, db)
+			go mergeChecker.Run(ctx, 5*time.Minute)
+			deployAnalyzer := aipkg.NewDeployAnalyzer(queries, aiService, nil)
+			go deployAnalyzer.Run(ctx, 2*time.Minute)
+			go aipkg.CacheCleanup(ctx, queries, 1*time.Minute)
+			slog.Info("AI workers started", "provider", cfg.AIProvider)
+		}
 	}
 
 	router := setupRouter(db, cfg)

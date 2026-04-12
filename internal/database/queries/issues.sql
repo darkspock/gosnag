@@ -158,3 +158,39 @@ WHERE project_id = $1
 SELECT DISTINCT first_release FROM issues
 WHERE project_id = $1 AND first_release != ''
 ORDER BY first_release;
+
+-- name: ListNewIssuesSince :many
+SELECT * FROM issues
+WHERE project_id = $1
+  AND first_seen >= $2
+  AND status IN ('open', 'reopened')
+ORDER BY first_seen DESC
+LIMIT 50;
+
+-- name: ListRecentOpenIssues :many
+SELECT * FROM issues
+WHERE project_id = $1
+  AND status IN ('open', 'reopened')
+  AND id != $2
+ORDER BY last_seen DESC
+LIMIT 10;
+
+-- name: ListIssuesCreatedSince :many
+SELECT * FROM issues
+WHERE project_id = $1
+  AND first_seen >= $2
+ORDER BY first_seen DESC;
+
+-- name: ListIssuesReopenedSince :many
+SELECT * FROM issues
+WHERE project_id = $1
+  AND status = 'reopened'
+  AND last_seen >= $2
+ORDER BY last_seen DESC;
+
+-- name: ListTopIssuesByEvents :many
+SELECT * FROM issues
+WHERE project_id = $1
+  AND status IN ('open', 'reopened')
+ORDER BY event_count DESC
+LIMIT $2;

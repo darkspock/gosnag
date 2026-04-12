@@ -1,0 +1,9 @@
+ALTER TABLE projects
+    DROP COLUMN ai_enabled,
+    DROP COLUMN ai_model,
+    DROP COLUMN ai_merge_suggestions,
+    DROP COLUMN ai_auto_merge,
+    DROP COLUMN ai_anomaly_detection,
+    DROP COLUMN ai_ticket_description,
+    DROP COLUMN ai_root_cause,
+    DROP COLUMN ai_triage;

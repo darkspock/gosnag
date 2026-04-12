@@ -26,6 +26,8 @@ SET name = $2, slug = $3, default_cooldown_minutes = $4, warning_as_error = $5,
     workflow_mode = $19,
     repo_provider = $20, repo_owner = $21, repo_name = $22,
     repo_default_branch = $23, repo_token = $24, repo_path_strip = $25,
+    ai_enabled = $26, ai_model = $27, ai_merge_suggestions = $28, ai_auto_merge = $29,
+    ai_anomaly_detection = $30, ai_ticket_description = $31, ai_root_cause = $32, ai_triage = $33,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
@@ -65,6 +67,9 @@ WHERE timestamp >= now() - interval '14 days'
   AND level IN ('error', 'fatal')
 GROUP BY project_id, bucket
 ORDER BY project_id, bucket;
+
+-- name: ListAIEnabledProjects :many
+SELECT * FROM projects WHERE ai_enabled = true AND ai_merge_suggestions = true;
 
 -- name: GetProjectLatestRelease :many
 SELECT DISTINCT ON (project_id) project_id, release

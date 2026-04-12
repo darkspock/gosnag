@@ -37,5 +37,20 @@ SELECT COUNT(DISTINCT user_identifier)::int as user_count
 FROM events
 WHERE issue_id = $1 AND user_identifier != '';
 
+-- name: GetLatestEventByIssue :one
+SELECT * FROM events
+WHERE issue_id = $1
+ORDER BY timestamp DESC
+LIMIT 1;
+
 -- name: DeleteEventsOlderThan :execresult
 DELETE FROM events WHERE created_at < $1;
+
+-- name: CountEventsInWindow :one
+SELECT count(*) FROM events WHERE project_id = $1 AND timestamp >= $2 AND timestamp < $3;
+
+-- name: CountEventsPerIssueInWindow :many
+SELECT issue_id, count(*)::int as event_count
+FROM events
+WHERE project_id = $1 AND timestamp >= $2 AND timestamp < $3
+GROUP BY issue_id;

@@ -51,6 +51,46 @@ func (q *Queries) CreateDeploy(ctx context.Context, arg CreateDeployParams) (Dep
 	return i, err
 }
 
+const getDeploy = `-- name: GetDeploy :one
+SELECT id, project_id, release_version, commit_sha, environment, url, deployed_at, created_at FROM deploys WHERE id = $1
+`
+
+func (q *Queries) GetDeploy(ctx context.Context, id uuid.UUID) (Deploy, error) {
+	row := q.db.QueryRowContext(ctx, getDeploy, id)
+	var i Deploy
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ReleaseVersion,
+		&i.CommitSha,
+		&i.Environment,
+		&i.Url,
+		&i.DeployedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLatestDeploy = `-- name: GetLatestDeploy :one
+SELECT id, project_id, release_version, commit_sha, environment, url, deployed_at, created_at FROM deploys WHERE project_id = $1 ORDER BY deployed_at DESC LIMIT 1
+`
+
+func (q *Queries) GetLatestDeploy(ctx context.Context, projectID uuid.UUID) (Deploy, error) {
+	row := q.db.QueryRowContext(ctx, getLatestDeploy, projectID)
+	var i Deploy
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ReleaseVersion,
+		&i.CommitSha,
+		&i.Environment,
+		&i.Url,
+		&i.DeployedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getLatestDeployForRelease = `-- name: GetLatestDeployForRelease :one
 SELECT id, project_id, release_version, commit_sha, environment, url, deployed_at, created_at FROM deploys WHERE project_id = $1 AND release_version = $2 ORDER BY deployed_at DESC LIMIT 1
 `
@@ -137,6 +177,47 @@ type ListDeploysParams struct {
 
 func (q *Queries) ListDeploys(ctx context.Context, arg ListDeploysParams) ([]Deploy, error) {
 	rows, err := q.db.QueryContext(ctx, listDeploys, arg.ProjectID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deploy{}
+	for rows.Next() {
+		var i Deploy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ReleaseVersion,
+			&i.CommitSha,
+			&i.Environment,
+			&i.Url,
+			&i.DeployedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentDeploys = `-- name: ListRecentDeploys :many
+SELECT id, project_id, release_version, commit_sha, environment, url, deployed_at, created_at FROM deploys WHERE project_id = $1 ORDER BY deployed_at DESC LIMIT $2
+`
+
+type ListRecentDeploysParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	Limit     int32     `json:"limit"`
+}
+
+func (q *Queries) ListRecentDeploys(ctx context.Context, arg ListRecentDeploysParams) ([]Deploy, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentDeploys, arg.ProjectID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

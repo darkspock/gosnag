@@ -26,3 +26,12 @@ SELECT * FROM deploys WHERE project_id = $1 ORDER BY deployed_at DESC LIMIT $2;
 
 -- name: GetLatestDeployForRelease :one
 SELECT * FROM deploys WHERE project_id = $1 AND release_version = $2 ORDER BY deployed_at DESC LIMIT 1;
+
+-- name: GetDeploy :one
+SELECT * FROM deploys WHERE id = $1;
+
+-- name: GetLatestDeploy :one
+SELECT * FROM deploys WHERE project_id = $1 ORDER BY deployed_at DESC LIMIT 1;
+
+-- name: ListRecentDeploys :many
+SELECT * FROM deploys WHERE project_id = $1 ORDER BY deployed_at DESC LIMIT $2;

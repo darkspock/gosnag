@@ -1,14 +1,14 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/lib/use-auth'
-import { api, type Issue, type Event, type User, type Project, type IssueTag, type IssueComment, type Ticket, type SuspectCommit, type ReleaseInfo } from '@/lib/api'
+import { api, type Issue, type Event, type User, type Project, type IssueTag, type IssueComment, type Ticket, type SuspectCommit, type ReleaseInfo, type MergeSuggestion, type AIAnalysis } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { Check, X, EyeOff, Bookmark, RotateCcw, ChevronDown, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink, Plus, Copy, MessageSquare, Pencil, Send } from 'lucide-react'
+import { Check, X, EyeOff, Bookmark, RotateCcw, ChevronDown, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink, Plus, Copy, MessageSquare, Pencil, Send, GitMerge, Sparkles, ClipboardCopy } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
@@ -56,6 +56,10 @@ export default function IssueDetail() {
   const [creatingTicket, setCreatingTicket] = useState(false)
   const [suspectCommits, setSuspectCommits] = useState<SuspectCommit[]>([])
   const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null)
+  const [mergeSuggestion, setMergeSuggestion] = useState<MergeSuggestion | null>(null)
+  const [analysis, setAnalysis] = useState<AIAnalysis | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisExpanded, setAnalysisExpanded] = useState(true)
   const eventLimit = 25
 
   useEffect(() => {
@@ -73,6 +77,8 @@ export default function IssueDetail() {
       api.getTicketByIssue(projectId, issueId).then(r => { if (r.ticket) setTicket(r.ticket) }).catch(() => {}),
       api.getSuspectCommits(projectId, issueId).then(r => setSuspectCommits(r.commits || [])).catch(() => {}),
       api.getReleaseInfo(projectId, issueId).then(setReleaseInfo).catch(() => {}),
+      api.getMergeSuggestion(projectId, issueId).then(r => setMergeSuggestion(r.suggestion)).catch(() => {}),
+      api.getAnalysis(projectId, issueId).then(r => setAnalysis(r.analysis)).catch(() => {}),
     ]).finally(() => setLoading(false))
   }, [projectId, issueId])
 
@@ -258,6 +264,59 @@ export default function IssueDetail() {
     toast.success(userId ? 'Issue assigned' : 'Issue unassigned')
   }
 
+  const handleAnalyze = async () => {
+    if (!projectId || !issueId) return
+    setAnalyzing(true)
+    try {
+      const result = await api.analyzeIssue(projectId, issueId)
+      setAnalysis(result)
+      setAnalysisExpanded(true)
+      toast.success('Analysis complete')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Analysis failed')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleCopyAnalysisToTicket = async () => {
+    if (!projectId || !analysis || !ticket) return
+    const content = `<h3>AI Root Cause Analysis</h3>\n<p><strong>Summary:</strong> ${analysis.summary}</p>\n<h4>Evidence</h4>\n<ul>${analysis.evidence.map(e => `<li>${e}</li>`).join('')}</ul>\n<h4>Suggested Fix</h4>\n<p>${analysis.suggested_fix}</p>`
+    const existing = ticket.description || ''
+    const newDesc = existing ? `${existing}\n<hr/>\n${content}` : content
+    try {
+      const updated = await api.updateTicket(projectId, ticket.id, { description: newDesc })
+      setTicket(updated)
+      toast.success('Analysis copied to ticket')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to copy')
+    }
+  }
+
+  const handleAcceptMerge = async () => {
+    if (!projectId || !issueId || !mergeSuggestion) return
+    try {
+      await api.acceptMergeSuggestion(projectId, issueId)
+      // Perform the actual merge
+      await api.mergeIssues(projectId, mergeSuggestion.target_issue_id, [issueId])
+      toast.success('Issues merged')
+      navigate(`/projects/${projectId}/issues/${mergeSuggestion.target_issue_id}`)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to merge')
+    }
+  }
+
+  const handleDismissMerge = async () => {
+    if (!projectId || !issueId) return
+    try {
+      await api.dismissMergeSuggestion(projectId, issueId)
+      setMergeSuggestion(null)
+      toast.success('Suggestion dismissed')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to dismiss')
+    }
+  }
+
   const isActionable = issue && (issue.status === 'open' || issue.status === 'reopened')
   const isErrorLevel = issue && issue.level !== 'info' && issue.level !== 'debug'
 
@@ -281,6 +340,35 @@ export default function IssueDetail() {
         { label: project?.name || 'Issues', to: `/projects/${projectId}` },
         { label: issue.title },
       ]} />
+
+      {mergeSuggestion && (
+        <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-start gap-3">
+            <GitMerge className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">AI Merge Suggestion</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                This issue looks similar to{' '}
+                <Link to={`/projects/${projectId}/issues/${mergeSuggestion.target_issue_id}`} className="text-primary hover:underline font-medium">
+                  {mergeSuggestion.target_issue_title}
+                </Link>
+                {' '}({Math.round(mergeSuggestion.confidence * 100)}% confidence)
+              </p>
+              {mergeSuggestion.reason && (
+                <p className="text-xs text-muted-foreground mt-1">{mergeSuggestion.reason}</p>
+              )}
+              <div className="flex gap-2 mt-3">
+                <Button size="sm" onClick={handleAcceptMerge}>
+                  <GitMerge className="h-3.5 w-3.5 mr-1" /> Merge into target
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleDismissMerge}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-start justify-between mb-6">
         <div>
@@ -596,6 +684,62 @@ export default function IssueDetail() {
             </div>
           </div>
         </>
+      )}
+
+      {/* AI Analysis */}
+      {project?.ai_enabled && project?.ai_root_cause && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => setAnalysisExpanded(!analysisExpanded)}
+              className="flex items-center gap-2 text-lg font-semibold hover:text-primary transition-colors"
+            >
+              <Sparkles className="h-5 w-5" />
+              AI Analysis
+              {analysis && <span className="text-xs font-normal text-muted-foreground">(v{analysis.version})</span>}
+              <ChevronDown className={cn('h-4 w-4 transition-transform', !analysisExpanded && '-rotate-90')} />
+            </button>
+            <div className="flex gap-2">
+              {analysis && ticket && (
+                <Button size="sm" variant="outline" onClick={handleCopyAnalysisToTicket}>
+                  <ClipboardCopy className="h-3.5 w-3.5 mr-1" /> Copy to ticket
+                </Button>
+              )}
+              <Button size="sm" variant={analysis ? 'outline' : 'default'} onClick={handleAnalyze} disabled={analyzing}>
+                <Sparkles className={cn('h-3.5 w-3.5 mr-1', analyzing && 'animate-pulse')} />
+                {analyzing ? 'Analyzing...' : analysis ? 'Regenerate' : 'Analyze'}
+              </Button>
+            </div>
+          </div>
+          {analysisExpanded && analysis && (
+            <div className="rounded-lg border bg-card p-4 space-y-4">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1">Summary</h3>
+                <p className="text-sm">{analysis.summary}</p>
+              </div>
+              {analysis.evidence && analysis.evidence.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1">Evidence</h3>
+                  <ul className="list-disc list-inside text-sm space-y-1">
+                    {analysis.evidence.map((e, i) => <li key={i} className="text-muted-foreground">{e}</li>)}
+                  </ul>
+                </div>
+              )}
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1">Suggested Fix</h3>
+                <div className="text-sm prose prose-invert prose-sm max-w-none">
+                  <Markdown remarkPlugins={[remarkGfm]}>{analysis.suggested_fix}</Markdown>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground/40">
+                Generated by {analysis.model} on {new Date(analysis.created_at).toLocaleString()}
+              </p>
+            </div>
+          )}
+          {analysisExpanded && !analysis && !analyzing && (
+            <p className="text-sm text-muted-foreground italic">No analysis yet. Click "Analyze" to generate a root cause analysis.</p>
+          )}
+        </div>
       )}
 
       {/* Comments */}

@@ -13,6 +13,42 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+type AiAnalysis struct {
+	ID           uuid.UUID `json:"id"`
+	IssueID      uuid.UUID `json:"issue_id"`
+	ProjectID    uuid.UUID `json:"project_id"`
+	Summary      string    `json:"summary"`
+	Evidence     string    `json:"evidence"`
+	SuggestedFix string    `json:"suggested_fix"`
+	Model        string    `json:"model"`
+	Version      int32     `json:"version"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type AiMergeSuggestion struct {
+	ID            uuid.UUID `json:"id"`
+	IssueID       uuid.UUID `json:"issue_id"`
+	TargetIssueID uuid.UUID `json:"target_issue_id"`
+	ProjectID     uuid.UUID `json:"project_id"`
+	Confidence    float32   `json:"confidence"`
+	Reason        string    `json:"reason"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type AiUsageLog struct {
+	ID             uuid.UUID      `json:"id"`
+	ProjectID      uuid.UUID      `json:"project_id"`
+	Feature        string         `json:"feature"`
+	Model          string         `json:"model"`
+	InputTokens    int32          `json:"input_tokens"`
+	OutputTokens   int32          `json:"output_tokens"`
+	LatencyMs      int32          `json:"latency_ms"`
+	PromptHash     sql.NullString `json:"prompt_hash"`
+	CachedResponse sql.NullString `json:"cached_response"`
+	CreatedAt      time.Time      `json:"created_at"`
+}
+
 type AlertConfig struct {
 	ID             uuid.UUID             `json:"id"`
 	ProjectID      uuid.UUID             `json:"project_id"`
@@ -51,6 +87,21 @@ type Deploy struct {
 	Url            sql.NullString `json:"url"`
 	DeployedAt     time.Time      `json:"deployed_at"`
 	CreatedAt      time.Time      `json:"created_at"`
+}
+
+type DeployAnalysis struct {
+	ID                  uuid.UUID `json:"id"`
+	DeployID            uuid.UUID `json:"deploy_id"`
+	ProjectID           uuid.UUID `json:"project_id"`
+	Severity            string    `json:"severity"`
+	Summary             string    `json:"summary"`
+	Details             string    `json:"details"`
+	LikelyDeployCaused  bool      `json:"likely_deploy_caused"`
+	RecommendedAction   string    `json:"recommended_action"`
+	NewIssuesCount      int32     `json:"new_issues_count"`
+	SpikedIssuesCount   int32     `json:"spiked_issues_count"`
+	ReopenedIssuesCount int32     `json:"reopened_issues_count"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 type Event struct {
@@ -217,6 +268,14 @@ type Project struct {
 	RepoDefaultBranch      string        `json:"repo_default_branch"`
 	RepoToken              string        `json:"repo_token"`
 	RepoPathStrip          string        `json:"repo_path_strip"`
+	AiEnabled              bool          `json:"ai_enabled"`
+	AiModel                string        `json:"ai_model"`
+	AiMergeSuggestions     bool          `json:"ai_merge_suggestions"`
+	AiAutoMerge            bool          `json:"ai_auto_merge"`
+	AiAnomalyDetection     bool          `json:"ai_anomaly_detection"`
+	AiTicketDescription    bool          `json:"ai_ticket_description"`
+	AiRootCause            bool          `json:"ai_root_cause"`
+	AiTriage               bool          `json:"ai_triage"`
 }
 
 type ProjectFavorite struct {

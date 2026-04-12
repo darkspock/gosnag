@@ -731,6 +731,195 @@ func (q *Queries) ListIssuesByProject(ctx context.Context, arg ListIssuesByProje
 	return items, nil
 }
 
+const listIssuesCreatedSince = `-- name: ListIssuesCreatedSince :many
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority, culprit, first_release, github_issue_number, github_issue_url FROM issues
+WHERE project_id = $1
+  AND first_seen >= $2
+ORDER BY first_seen DESC
+`
+
+type ListIssuesCreatedSinceParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	FirstSeen time.Time `json:"first_seen"`
+}
+
+func (q *Queries) ListIssuesCreatedSince(ctx context.Context, arg ListIssuesCreatedSinceParams) ([]Issue, error) {
+	rows, err := q.db.QueryContext(ctx, listIssuesCreatedSince, arg.ProjectID, arg.FirstSeen)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Issue{}
+	for rows.Next() {
+		var i Issue
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Title,
+			&i.Fingerprint,
+			&i.Status,
+			&i.Level,
+			&i.Platform,
+			&i.FirstSeen,
+			&i.LastSeen,
+			&i.EventCount,
+			&i.AssignedTo,
+			&i.ResolvedAt,
+			&i.CooldownUntil,
+			&i.ResolvedInRelease,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SnoozeUntil,
+			&i.SnoozeEventThreshold,
+			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
+			&i.Priority,
+			&i.Culprit,
+			&i.FirstRelease,
+			&i.GithubIssueNumber,
+			&i.GithubIssueUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIssuesReopenedSince = `-- name: ListIssuesReopenedSince :many
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority, culprit, first_release, github_issue_number, github_issue_url FROM issues
+WHERE project_id = $1
+  AND status = 'reopened'
+  AND last_seen >= $2
+ORDER BY last_seen DESC
+`
+
+type ListIssuesReopenedSinceParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	LastSeen  time.Time `json:"last_seen"`
+}
+
+func (q *Queries) ListIssuesReopenedSince(ctx context.Context, arg ListIssuesReopenedSinceParams) ([]Issue, error) {
+	rows, err := q.db.QueryContext(ctx, listIssuesReopenedSince, arg.ProjectID, arg.LastSeen)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Issue{}
+	for rows.Next() {
+		var i Issue
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Title,
+			&i.Fingerprint,
+			&i.Status,
+			&i.Level,
+			&i.Platform,
+			&i.FirstSeen,
+			&i.LastSeen,
+			&i.EventCount,
+			&i.AssignedTo,
+			&i.ResolvedAt,
+			&i.CooldownUntil,
+			&i.ResolvedInRelease,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SnoozeUntil,
+			&i.SnoozeEventThreshold,
+			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
+			&i.Priority,
+			&i.Culprit,
+			&i.FirstRelease,
+			&i.GithubIssueNumber,
+			&i.GithubIssueUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNewIssuesSince = `-- name: ListNewIssuesSince :many
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority, culprit, first_release, github_issue_number, github_issue_url FROM issues
+WHERE project_id = $1
+  AND first_seen >= $2
+  AND status IN ('open', 'reopened')
+ORDER BY first_seen DESC
+LIMIT 50
+`
+
+type ListNewIssuesSinceParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	FirstSeen time.Time `json:"first_seen"`
+}
+
+func (q *Queries) ListNewIssuesSince(ctx context.Context, arg ListNewIssuesSinceParams) ([]Issue, error) {
+	rows, err := q.db.QueryContext(ctx, listNewIssuesSince, arg.ProjectID, arg.FirstSeen)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Issue{}
+	for rows.Next() {
+		var i Issue
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Title,
+			&i.Fingerprint,
+			&i.Status,
+			&i.Level,
+			&i.Platform,
+			&i.FirstSeen,
+			&i.LastSeen,
+			&i.EventCount,
+			&i.AssignedTo,
+			&i.ResolvedAt,
+			&i.CooldownUntil,
+			&i.ResolvedInRelease,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SnoozeUntil,
+			&i.SnoozeEventThreshold,
+			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
+			&i.Priority,
+			&i.Culprit,
+			&i.FirstRelease,
+			&i.GithubIssueNumber,
+			&i.GithubIssueUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenN1Issues = `-- name: ListOpenN1Issues :many
 SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority, culprit, first_release, github_issue_number, github_issue_url FROM issues
 WHERE project_id = $1
@@ -740,6 +929,133 @@ WHERE project_id = $1
 
 func (q *Queries) ListOpenN1Issues(ctx context.Context, projectID uuid.UUID) ([]Issue, error) {
 	rows, err := q.db.QueryContext(ctx, listOpenN1Issues, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Issue{}
+	for rows.Next() {
+		var i Issue
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Title,
+			&i.Fingerprint,
+			&i.Status,
+			&i.Level,
+			&i.Platform,
+			&i.FirstSeen,
+			&i.LastSeen,
+			&i.EventCount,
+			&i.AssignedTo,
+			&i.ResolvedAt,
+			&i.CooldownUntil,
+			&i.ResolvedInRelease,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SnoozeUntil,
+			&i.SnoozeEventThreshold,
+			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
+			&i.Priority,
+			&i.Culprit,
+			&i.FirstRelease,
+			&i.GithubIssueNumber,
+			&i.GithubIssueUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentOpenIssues = `-- name: ListRecentOpenIssues :many
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority, culprit, first_release, github_issue_number, github_issue_url FROM issues
+WHERE project_id = $1
+  AND status IN ('open', 'reopened')
+  AND id != $2
+ORDER BY last_seen DESC
+LIMIT 10
+`
+
+type ListRecentOpenIssuesParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	ID        uuid.UUID `json:"id"`
+}
+
+func (q *Queries) ListRecentOpenIssues(ctx context.Context, arg ListRecentOpenIssuesParams) ([]Issue, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentOpenIssues, arg.ProjectID, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Issue{}
+	for rows.Next() {
+		var i Issue
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Title,
+			&i.Fingerprint,
+			&i.Status,
+			&i.Level,
+			&i.Platform,
+			&i.FirstSeen,
+			&i.LastSeen,
+			&i.EventCount,
+			&i.AssignedTo,
+			&i.ResolvedAt,
+			&i.CooldownUntil,
+			&i.ResolvedInRelease,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SnoozeUntil,
+			&i.SnoozeEventThreshold,
+			&i.SnoozeEventsAtStart,
+			&i.JiraTicketKey,
+			&i.JiraTicketUrl,
+			&i.Priority,
+			&i.Culprit,
+			&i.FirstRelease,
+			&i.GithubIssueNumber,
+			&i.GithubIssueUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTopIssuesByEvents = `-- name: ListTopIssuesByEvents :many
+SELECT id, project_id, title, fingerprint, status, level, platform, first_seen, last_seen, event_count, assigned_to, resolved_at, cooldown_until, resolved_in_release, created_at, updated_at, snooze_until, snooze_event_threshold, snooze_events_at_start, jira_ticket_key, jira_ticket_url, priority, culprit, first_release, github_issue_number, github_issue_url FROM issues
+WHERE project_id = $1
+  AND status IN ('open', 'reopened')
+ORDER BY event_count DESC
+LIMIT $2
+`
+
+type ListTopIssuesByEventsParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	Limit     int32     `json:"limit"`
+}
+
+func (q *Queries) ListTopIssuesByEvents(ctx context.Context, arg ListTopIssuesByEventsParams) ([]Issue, error) {
+	rows, err := q.db.QueryContext(ctx, listTopIssuesByEvents, arg.ProjectID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
