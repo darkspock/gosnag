@@ -78,7 +78,10 @@ export default function TicketDetail() {
   useEffect(() => {
     if (!projectId || !ticketId) return
     Promise.all([
-      api.getProject(projectId).then(setProject),
+      api.getProject(projectId).then(p => {
+        setProject(p)
+        return p
+      }),
       api.getTicket(projectId, ticketId).then(async t => {
         setTicket(t)
         // Only fetch issue-related data if ticket has a linked issue
@@ -98,9 +101,20 @@ export default function TicketDetail() {
         }
         api.getTicketTransitions(projectId, ticketId).then(r => setTransitions(r.transitions)).catch(() => {})
         api.listAttachments(projectId, ticketId).then(setAttachments).catch(() => {})
+        return t
       }),
       api.listUsers().then(setUsers),
-    ]).finally(() => setLoading(false))
+    ]).then(([p, t]) => {
+      // Auto-generate AI description for new tickets with a linked issue and no description
+      if (p && t && t.issue_id && !t.description && p.ai_enabled && p.ai_ticket_description) {
+        setGeneratingDescription(true)
+        api.generateDescription(projectId, ticketId)
+          .then(result => api.updateTicket(projectId, ticketId, { description: result.description }))
+          .then(updated => { setTicket(updated); toast.success('AI description generated') })
+          .catch(() => {})
+          .finally(() => setGeneratingDescription(false))
+      }
+    }).finally(() => setLoading(false))
   }, [projectId, ticketId])
 
   const refreshTicket = async () => {
