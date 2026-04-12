@@ -46,6 +46,12 @@ type Config struct {
 
 	// Rate limit: max requests per minute per IP for ingest endpoints (0 = unlimited)
 	IngestRateLimitPerMin int
+
+	// Uploads - S3 (if UPLOAD_S3_BUCKET is set, use S3; otherwise local disk)
+	UploadS3Bucket    string
+	UploadS3Region    string
+	UploadS3Prefix    string
+	UploadS3CDNURL    string
 }
 
 func Load() (*Config, error) {
@@ -86,6 +92,11 @@ func Load() (*Config, error) {
 
 		EventRetentionDays:    getEnvInt("EVENT_RETENTION_DAYS", 90),
 		IngestRateLimitPerMin: getEnvInt("INGEST_RATE_LIMIT_PER_MIN", 0),
+
+		UploadS3Bucket: getEnv("UPLOAD_S3_BUCKET", ""),
+		UploadS3Region: getEnv("UPLOAD_S3_REGION", getEnv("AWS_REGION", "eu-west-1")),
+		UploadS3Prefix: getEnv("UPLOAD_S3_PREFIX", "uploads/"),
+		UploadS3CDNURL: getEnv("UPLOAD_S3_CDN_URL", ""),
 	}, nil
 }
 

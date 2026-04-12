@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -77,7 +79,28 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	jiraHandler := jira.NewHandler(queries, cfg)
 	githubHandler := github.NewHandler(queries, cfg)
 	activityHandler := activitypkg.NewHandler(queries)
-	uploadHandler := upload.NewHandler("uploads", cfg.BaseURL)
+	// Select upload storage: S3 if configured, otherwise local disk
+	var uploadStorage upload.Storage
+	if cfg.UploadS3Bucket != "" {
+		s3store, err := upload.NewS3Storage(upload.S3Config{
+			Bucket:    cfg.UploadS3Bucket,
+			Region:    cfg.UploadS3Region,
+			Prefix:    cfg.UploadS3Prefix,
+			CDNURL:    cfg.UploadS3CDNURL,
+			AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"),
+			SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+		})
+		if err != nil {
+			slog.Error("failed to initialize S3 storage, falling back to local", "error", err)
+			uploadStorage = &upload.LocalStorage{Dir: "uploads", BaseURL: cfg.BaseURL}
+		} else {
+			slog.Info("uploads configured with S3", "bucket", cfg.UploadS3Bucket, "region", cfg.UploadS3Region)
+			uploadStorage = s3store
+		}
+	} else {
+		uploadStorage = &upload.LocalStorage{Dir: "uploads", BaseURL: cfg.BaseURL}
+	}
+	uploadHandler := upload.NewHandler(uploadStorage)
 	sourceCodeHandler := sourcecode.NewHandler(queries)
 	priorityHandler := priority.NewHandler(queries)
 	tagsHandler := tags.NewHandler(queries)

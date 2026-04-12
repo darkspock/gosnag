@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -24,13 +23,11 @@ var allowedMIME = map[string]string{
 }
 
 type Handler struct {
-	uploadDir string
-	baseURL   string
+	storage Storage
 }
 
-func NewHandler(uploadDir, baseURL string) *Handler {
-	os.MkdirAll(uploadDir, 0755)
-	return &Handler{uploadDir: uploadDir, baseURL: baseURL}
+func NewHandler(storage Storage) *Handler {
+	return &Handler{storage: storage}
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -72,30 +69,21 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	rand.Read(b)
 	filename := fmt.Sprintf("%s_%s%s", time.Now().Format("20060102"), hex.EncodeToString(b), ext)
 
-	dst, err := os.Create(filepath.Join(h.uploadDir, filename))
+	url, err := h.storage.Put(r.Context(), filename, detected, file)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to save file")
+		writeError(w, http.StatusInternalServerError, "failed to save file: "+err.Error())
 		return
 	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, file); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to save file")
-		return
-	}
-
-	url := h.baseURL + "/uploads/" + filename
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"url": url})
 }
 
-// ServeUploads returns an http.Handler that serves uploaded files with safe headers.
+// ServeUploads returns an http.Handler that serves locally stored uploaded files with safe headers.
 func ServeUploads(dir string) http.Handler {
 	fs := http.Dir(dir)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Force download for anything not obviously an image extension
 		name := filepath.Base(r.URL.Path)
 		lname := strings.ToLower(name)
 		isImage := strings.HasSuffix(lname, ".png") || strings.HasSuffix(lname, ".jpg") ||
@@ -105,7 +93,6 @@ func ServeUploads(dir string) http.Handler {
 		if !isImage {
 			w.Header().Set("Content-Disposition", "attachment; filename="+name)
 		}
-		// Prevent MIME sniffing
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 
 		http.FileServer(fs).ServeHTTP(w, r)
