@@ -29,13 +29,21 @@ GoSnag supports multiple AI providers. Teams choose based on cost, privacy, and 
         │  Interface   │
         └──────┬──────┘
                │
-    ┌──────────┼──────────┬──────────┐
-    │          │          │          │
-┌───▼──┐  ┌───▼──┐  ┌───▼──┐  ┌───▼──┐
-│OpenAI│  │Claude│  │Gemini│  │Ollama│
-│      │  │      │  │      │  │(local)│
-└──────┘  └──────┘  └──────┘  └──────┘
+    ┌──────┬───┼───┬──────┬──────┐
+    │      │   │   │      │      │
+┌───▼──┐┌──▼─┐┌▼───┐┌──▼──┐┌──▼──┐┌──▼──┐
+│OpenAI││Groq││Bed-││Clau-││Gemi-││Olla-│
+│      ││    ││rock││de   ││ni   ││ma   │
+└──────┘└────┘└────┘└─────┘└─────┘└─────┘
 ```
+
+**Provider strengths:**
+- **OpenAI**: Best overall quality/cost. Broad model selection.
+- **Groq**: Fastest inference (~200ms). Ideal for real-time features.
+- **Bedrock**: AWS-native. Uses existing IAM, no extra API keys. Claude/Llama/Titan models.
+- **Claude**: Best reasoning for complex root cause analysis.
+- **Gemini**: Google ecosystem. Large context windows.
+- **Ollama**: Self-hosted, zero cost, full privacy. Needs GPU.
 
 ### Provider Interface
 
@@ -72,10 +80,14 @@ type ChatResponse struct {
 Global AI provider config (one provider for the whole instance):
 
 ```
-AI_PROVIDER=openai          # openai, claude, gemini, ollama
+AI_PROVIDER=openai          # openai, groq, bedrock, claude, gemini, ollama
 AI_API_KEY=sk-...           # API key for the provider
 AI_MODEL=gpt-4o-mini        # model to use
 AI_BASE_URL=                # custom endpoint (for Ollama, proxies, etc.)
+
+# Bedrock-specific (uses AWS credentials from environment)
+AI_BEDROCK_REGION=eu-west-1
+AI_BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 ```
 
 Per-project overrides (optional):
@@ -111,9 +123,22 @@ ALTER TABLE projects
 ### 1.2 Provider Implementations
 
 **OpenAI** (`internal/ai/openai.go`):
-- Models: gpt-4o, gpt-4o-mini, gpt-4-turbo
+- Models: gpt-4o, gpt-4o-mini, gpt-4-turbo, o1-mini
 - API: `POST https://api.openai.com/v1/chat/completions`
 - JSON mode: `response_format: { type: "json_object" }`
+
+**Groq** (`internal/ai/groq.go`):
+- Models: llama-3.3-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768
+- API: OpenAI-compatible `POST https://api.groq.com/openai/v1/chat/completions`
+- Ultra-fast inference, very low latency — ideal for real-time features (triage, auto-merge)
+- JSON mode: same as OpenAI
+
+**Amazon Bedrock** (`internal/ai/bedrock.go`):
+- Models: anthropic.claude-3-haiku, anthropic.claude-3-sonnet, meta.llama3-70b-instruct, amazon.titan-text-express
+- API: AWS SDK `InvokeModel` / `Converse` API
+- Auth: uses AWS credential chain (env vars, instance role, SSO)
+- For teams already on AWS — no extra API keys, uses existing IAM
+- JSON mode: via system prompt or Converse API tool use
 
 **Anthropic Claude** (`internal/ai/claude.go`):
 - Models: claude-sonnet-4-20250514, claude-haiku
@@ -451,29 +476,30 @@ Block 1: Provider Infrastructure ──┐
 
 ## MVP
 
-1. **Provider infrastructure** with OpenAI + Claude + Ollama (Block 1)
+1. **Provider infrastructure** with OpenAI + Groq + Bedrock (Block 1)
 2. **AI ticket description** — auto-generate on ticket creation (Block 4)
 3. **Auto-merge suggestions** — suggest duplicates, manual accept (Block 2)
 
 These three give immediate visible value. Deploy anomaly detection and root cause analysis are more complex and can follow.
 
+Adding Claude, Gemini, and Ollama as providers is straightforward once the interface exists — each is ~100 lines of Go.
+
 ---
 
 ## Cost Estimates
 
-Assuming gpt-4o-mini ($0.15/1M input, $0.60/1M output):
+Estimated per provider, medium-sized project (~50 new issues/day):
 
-| Feature | Tokens/call | Calls/day* | Daily cost |
-|---------|-------------|-----------|------------|
-| Ticket description | ~2k in, ~500 out | 20 | $0.01 |
-| Auto-merge check | ~3k in, ~100 out | 50 | $0.03 |
-| Deploy analysis | ~5k in, ~500 out | 5 | $0.01 |
-| Root cause analysis | ~5k in, ~1k out | 10 | $0.02 |
-| Triage suggestions | ~2k in, ~100 out | 50 | $0.02 |
+| Provider | Model | Cost/month | Latency | Notes |
+|----------|-------|-----------|---------|-------|
+| **Groq** | llama-3.3-70b | ~$1.50 | ~200ms | Fastest. Best for real-time (triage, merge) |
+| **OpenAI** | gpt-4o-mini | ~$2.70 | ~1-2s | Best quality/cost ratio |
+| **Bedrock** | claude-3-haiku | ~$3.00 | ~1-3s | No extra keys if already on AWS |
+| **Bedrock** | llama3-70b | ~$2.00 | ~2-4s | Good quality, AWS-native |
+| **Claude** | claude-haiku | ~$5.00 | ~1-2s | Direct Anthropic API |
+| **Ollama** | llama3 | $0 | ~3-5s | Self-hosted, private, needs GPU |
 
-*Estimates for a medium-sized project. **Total: ~$0.09/day ($2.70/month)**
-
-With Claude Haiku: roughly 2x cost. With Ollama: $0.
+Recommendation: **Groq for latency-sensitive features** (auto-merge, triage) + **OpenAI or Bedrock for quality-sensitive features** (root cause, descriptions).
 
 ---
 
