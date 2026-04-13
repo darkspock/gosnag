@@ -13,7 +13,8 @@ import (
 )
 
 // AutoTag evaluates tag rules for an issue and applies matching tags.
-// Searches both the issue title and the full event data (stacktrace, message, etc.).
+// Searches the issue title and error-relevant event fields (exception, request, breadcrumbs, transaction).
+// Excludes noise fields like "modules" (installed packages) to prevent false positives.
 // Should be called asynchronously after event ingestion.
 func AutoTag(ctx context.Context, queries *db.Queries, projectID uuid.UUID, issue db.Issue, eventData json.RawMessage) {
 	rules, err := queries.ListEnabledTagRules(ctx, projectID)
@@ -21,7 +22,7 @@ func AutoTag(ctx context.Context, queries *db.Queries, projectID uuid.UUID, issu
 		return
 	}
 
-	searchText := issue.Title + "\n" + string(eventData)
+	searchText := buildSearchText(issue.Title, eventData)
 
 	// Shared eval context for conditions engine (no loader needed — tags don't use velocity/users)
 	evalCtx := conditions.NewEvalContext(conditions.IssueData{
@@ -53,6 +54,43 @@ func AutoTag(ctx context.Context, queries *db.Queries, projectID uuid.UUID, issu
 			}
 		}
 	}
+}
+
+// buildSearchText extracts only error-relevant fields from event data for pattern matching.
+// This prevents false positives from noise fields like "modules" (composer/npm packages).
+func buildSearchText(issueTitle string, eventData json.RawMessage) string {
+	var buf strings.Builder
+	buf.WriteString(issueTitle)
+	buf.WriteByte('\n')
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(eventData, &raw); err != nil {
+		// Fallback: if we can't parse, use the full data
+		buf.Write(eventData)
+		return buf.String()
+	}
+
+	// Only include fields relevant for error classification
+	relevantKeys := []string{
+		"exception",    // exception type, value, stacktrace
+		"message",      // log message
+		"logentry",     // structured log entry
+		"transaction",  // transaction/endpoint name
+		"request",      // HTTP request URL, method
+		"breadcrumbs",  // breadcrumb trail
+		"tags",         // SDK-provided tags
+		"extra",        // extra context from SDK
+		"fingerprint",  // custom fingerprint
+	}
+
+	for _, key := range relevantKeys {
+		if val, ok := raw[key]; ok {
+			buf.WriteByte('\n')
+			buf.Write(val)
+		}
+	}
+
+	return buf.String()
 }
 
 func matchesPattern(pattern, text string) bool {
