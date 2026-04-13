@@ -276,10 +276,23 @@ Keep suggestions practical and specific to the project's error patterns.
 		return
 	}
 
-	// Pass through the AI response directly — it's already JSON
+	// Strip markdown code fences if the model wrapped the JSON
+	content := strings.TrimSpace(resp.Content)
+	if strings.HasPrefix(content, "```") {
+		// Remove opening fence (```json or ```)
+		if idx := strings.Index(content, "\n"); idx != -1 {
+			content = content[idx+1:]
+		}
+		// Remove closing fence
+		if idx := strings.LastIndex(content, "```"); idx != -1 {
+			content = content[:idx]
+		}
+		content = strings.TrimSpace(content)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(resp.Content))
+	w.Write([]byte(content))
 }
 
 func toNullJSON(raw json.RawMessage) pqtype.NullRawMessage {
