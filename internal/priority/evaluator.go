@@ -2,13 +2,16 @@ package priority
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/darkspock/gosnag/internal/ai"
 	"github.com/darkspock/gosnag/internal/conditions"
 	"github.com/darkspock/gosnag/internal/database/db"
 	"github.com/google/uuid"
@@ -55,7 +58,8 @@ func (c *velocityCache) set(key string, count int32) {
 // Evaluate calculates the priority score for an issue based on project rules.
 // Should be called asynchronously after event ingestion.
 // eventData is the raw JSON of the latest event (for full-text search in rules).
-func Evaluate(ctx context.Context, queries *db.Queries, projectID uuid.UUID, issue db.Issue, eventData json.RawMessage) {
+// aiService may be nil if AI is not configured.
+func Evaluate(ctx context.Context, queries *db.Queries, aiService *ai.Service, projectID uuid.UUID, issue db.Issue, eventData json.RawMessage) {
 	rules, err := queries.ListEnabledPriorityRules(ctx, projectID)
 	if err != nil || len(rules) == 0 {
 		return
@@ -134,6 +138,11 @@ func Evaluate(ctx context.Context, queries *db.Queries, projectID uuid.UUID, iss
 
 			case "platform_is":
 				matched = strings.EqualFold(issue.Platform, rule.Pattern)
+
+			case "ai_prompt":
+				pts := evaluateAIRule(ctx, queries, aiService, rule, issue, eventData)
+				score += pts
+				continue // skip the matched check below, points already applied
 			}
 		}
 
@@ -163,7 +172,7 @@ func Evaluate(ctx context.Context, queries *db.Queries, projectID uuid.UUID, iss
 
 // EvaluateAll recalculates priority for all issues in a project.
 // Loads rules once and reuses them across all issues to avoid N+1 queries.
-func EvaluateAll(ctx context.Context, queries *db.Queries, projectID uuid.UUID) (int, error) {
+func EvaluateAll(ctx context.Context, queries *db.Queries, aiService *ai.Service, projectID uuid.UUID) (int, error) {
 	rules, err := queries.ListEnabledPriorityRules(ctx, projectID)
 	if err != nil || len(rules) == 0 {
 		return 0, err
@@ -185,14 +194,14 @@ func EvaluateAll(ctx context.Context, queries *db.Queries, projectID uuid.UUID) 
 		if err == nil && len(events) > 0 {
 			eventData = events[0].Data
 		}
-		evaluateWithRules(ctx, queries, rules, issue, eventData)
+		evaluateWithRules(ctx, queries, aiService, rules, issue, eventData)
 		count++
 	}
 	return count, nil
 }
 
 // evaluateWithRules scores an issue using pre-loaded rules (avoids reloading per issue).
-func evaluateWithRules(ctx context.Context, queries *db.Queries, rules []db.PriorityRule, issue db.Issue, eventData json.RawMessage) {
+func evaluateWithRules(ctx context.Context, queries *db.Queries, aiService *ai.Service, rules []db.PriorityRule, issue db.Issue, eventData json.RawMessage) {
 	eventText := string(eventData)
 	searchText := issue.Title + "\n" + eventText
 
@@ -250,6 +259,11 @@ func evaluateWithRules(ctx context.Context, queries *db.Queries, rules []db.Prio
 				matched = strings.EqualFold(issue.Level, rule.Pattern)
 			case "platform_is":
 				matched = strings.EqualFold(issue.Platform, rule.Pattern)
+
+			case "ai_prompt":
+				pts := evaluateAIRule(ctx, queries, aiService, rule, issue, eventData)
+				score += pts
+				continue
 			}
 		}
 
@@ -351,4 +365,128 @@ func (l *priorityLoader) GetVelocity24h(issueID uuid.UUID) (int32, error) {
 
 func (l *priorityLoader) GetUserCount(issueID uuid.UUID) (int32, error) {
 	return getUserCount(l.ctx, l.queries, issueID), nil
+}
+
+// evaluateAIRule handles the ai_prompt rule type. Returns points to add to score.
+// The rule fires once per issue when event_count >= threshold. Results are stored
+// in ai_priority_evaluations as both execution guard and audit log.
+func evaluateAIRule(ctx context.Context, queries *db.Queries, aiService *ai.Service, rule db.PriorityRule, issue db.Issue, eventData json.RawMessage) int32 {
+	if aiService == nil {
+		return 0
+	}
+
+	// Only evaluate when issue reaches the event threshold
+	if issue.EventCount < rule.Threshold {
+		return 0
+	}
+
+	// Check if already evaluated
+	eval, err := queries.GetAIPriorityEvaluation(ctx, db.GetAIPriorityEvaluationParams{
+		IssueID: issue.ID,
+		RuleID:  rule.ID,
+	})
+	if err == nil {
+		// Already evaluated
+		if eval.Status == "success" {
+			return eval.Points
+		}
+		// Error status — retry if under limit
+		if eval.Retries >= 3 {
+			return 0
+		}
+		// Fall through to retry
+	} else if err != sql.ErrNoRows {
+		slog.Error("ai priority: failed to check evaluation", "error", err, "issue_id", issue.ID, "rule_id", rule.ID)
+		return 0
+	}
+
+	retries := int32(0)
+	if err == nil {
+		retries = eval.Retries
+	}
+
+	// Build the AI prompt
+	eventSnippet := string(eventData)
+	if len(eventSnippet) > 2000 {
+		eventSnippet = eventSnippet[:2000] + "..."
+	}
+
+	systemPrompt := fmt.Sprintf(`You are an AI assistant that evaluates error issues for priority scoring.
+You will receive an evaluation prompt and issue details. Respond with valid JSON only.
+
+Response format: {"points": <int>, "reason": "<string>"}
+The points value must be between %d and %d.
+Positive points mean higher priority, negative means lower priority.
+Keep the reason concise (1-2 sentences).`, -rule.Points, rule.Points)
+
+	userContent := fmt.Sprintf(`## Evaluation Criteria
+%s
+
+## Issue Details
+- Title: %s
+- Level: %s
+- Platform: %s
+- Event Count: %d
+- Culprit: %s
+
+## Latest Event Data
+%s`, rule.Pattern, issue.Title, issue.Level, issue.Platform, issue.EventCount, issue.Culprit, eventSnippet)
+
+	resp, err := aiService.Chat(ctx, issue.ProjectID, "priority_eval", ai.ChatRequest{
+		SystemPrompt: systemPrompt,
+		Messages:     []ai.Message{{Role: "user", Content: userContent}},
+		MaxTokens:    256,
+		Temperature:  0.1,
+		JSON:         true,
+	})
+	if err != nil {
+		slog.Error("ai priority: call failed", "error", err, "issue_id", issue.ID, "rule_id", rule.ID)
+		queries.UpsertAIPriorityEvaluation(ctx, db.UpsertAIPriorityEvaluationParams{
+			IssueID: issue.ID,
+			RuleID:  rule.ID,
+			Status:  "error",
+			Points:  0,
+			Reason:  err.Error(),
+			Retries: retries + 1,
+		})
+		return 0
+	}
+
+	// Parse AI response
+	var result struct {
+		Points int32  `json:"points"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal([]byte(resp.Content), &result); err != nil {
+		slog.Error("ai priority: failed to parse response", "error", err, "content", resp.Content, "issue_id", issue.ID)
+		queries.UpsertAIPriorityEvaluation(ctx, db.UpsertAIPriorityEvaluationParams{
+			IssueID: issue.ID,
+			RuleID:  rule.ID,
+			Status:  "error",
+			Points:  0,
+			Reason:  fmt.Sprintf("parse error: %v", err),
+			Retries: retries + 1,
+		})
+		return 0
+	}
+
+	// Clamp points to [-rule.Points, +rule.Points]
+	if result.Points > rule.Points {
+		result.Points = rule.Points
+	}
+	if result.Points < -rule.Points {
+		result.Points = -rule.Points
+	}
+
+	// Store success
+	queries.UpsertAIPriorityEvaluation(ctx, db.UpsertAIPriorityEvaluationParams{
+		IssueID: issue.ID,
+		RuleID:  rule.ID,
+		Status:  "success",
+		Points:  result.Points,
+		Reason:  result.Reason,
+		Retries: retries,
+	})
+
+	return result.Points
 }

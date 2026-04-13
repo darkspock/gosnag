@@ -36,6 +36,18 @@ type AiMergeSuggestion struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+type AiPriorityEvaluation struct {
+	ID        uuid.UUID `json:"id"`
+	IssueID   uuid.UUID `json:"issue_id"`
+	RuleID    uuid.UUID `json:"rule_id"`
+	Status    string    `json:"status"`
+	Points    int32     `json:"points"`
+	Reason    string    `json:"reason"`
+	Retries   int32     `json:"retries"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type AiUsageLog struct {
 	ID             uuid.UUID      `json:"id"`
 	ProjectID      uuid.UUID      `json:"project_id"`

@@ -148,6 +148,8 @@ export const api = {
     request<void>(`/projects/${projectId}/priority-rules/${ruleId}`, { method: 'DELETE' }),
   recalcPriority: (projectId: string) =>
     request<{ recalculated: number }>(`/projects/${projectId}/priority-rules/recalc`, { method: 'POST' }),
+  suggestPriorityRules: (projectId: string, data: { include_issues: boolean; messages: { role: string; content: string }[] }) =>
+    request<{ message: string; suggestions: RuleSuggestion[] }>(`/projects/${projectId}/priority-rules/suggest`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Tags
   listIssueTags: (projectId: string, issueId: string) => request<IssueTag[]>(`/projects/${projectId}/issues/${issueId}/tags`),
@@ -511,6 +513,16 @@ export type PriorityRuleData = {
   threshold: number
   points: number
   enabled: boolean
+}
+
+export interface RuleSuggestion {
+  name: string
+  rule_type: string
+  pattern: string
+  operator?: string
+  threshold?: number
+  points: number
+  explanation: string
 }
 
 export interface JiraRule {

@@ -13,9 +13,10 @@ import (
 
 // Service wraps a Provider with token tracking, rate limiting, and caching.
 type Service struct {
-	provider Provider
-	queries  *db.Queries
-	cfg      *config.Config
+	provider         Provider
+	thinkingProvider Provider
+	queries          *db.Queries
+	cfg              *config.Config
 }
 
 // NewService creates an AI service. Returns nil if AI is not configured.
@@ -24,15 +25,24 @@ func NewService(queries *db.Queries, cfg *config.Config) *Service {
 	if provider == nil {
 		return nil
 	}
-	return &Service{
+	s := &Service{
 		provider: provider,
 		queries:  queries,
 		cfg:      cfg,
 	}
+	// Create thinking provider if a separate model is configured
+	if cfg.AIBedrockThinkingModelID != "" && cfg.AIProvider == "bedrock" {
+		s.thinkingProvider = newBedrockProvider(cfg.AIBedrockRegion, cfg.AIBedrockThinkingModelID)
+	}
+	return s
 }
 
 // Chat executes an AI call with budget, rate limit, and cache checks.
 func (s *Service) Chat(ctx context.Context, projectID uuid.UUID, feature string, req ChatRequest) (*ChatResponse, error) {
+	return s.chatWithProvider(ctx, s.provider, projectID, feature, req)
+}
+
+func (s *Service) chatWithProvider(ctx context.Context, provider Provider, projectID uuid.UUID, feature string, req ChatRequest) (*ChatResponse, error) {
 	// Check daily token budget
 	dailyUsage, err := s.queries.GetDailyTokenUsage(ctx, projectID)
 	if err != nil && err != sql.ErrNoRows {
@@ -65,7 +75,7 @@ func (s *Service) Chat(ctx context.Context, projectID uuid.UUID, feature string,
 
 	// Call the provider
 	start := time.Now()
-	resp, err := s.provider.Chat(ctx, req)
+	resp, err := provider.Chat(ctx, req)
 	latency := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -77,6 +87,15 @@ func (s *Service) Chat(ctx context.Context, projectID uuid.UUID, feature string,
 	// Log success with cache
 	s.logCall(ctx, projectID, feature, resp.InputTokens, resp.OutputTokens, int(latency), promptHash, resp.Content)
 	return resp, nil
+}
+
+// ThinkingChat executes an AI call using the thinking model (falls back to default provider).
+func (s *Service) ThinkingChat(ctx context.Context, projectID uuid.UUID, feature string, req ChatRequest) (*ChatResponse, error) {
+	provider := s.thinkingProvider
+	if provider == nil {
+		provider = s.provider
+	}
+	return s.chatWithProvider(ctx, provider, projectID, feature, req)
 }
 
 // ProviderName returns the name of the configured provider.

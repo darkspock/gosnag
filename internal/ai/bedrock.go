@@ -7,7 +7,6 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
-	gosnagconfig "github.com/darkspock/gosnag/internal/config"
 )
 
 type bedrockProvider struct {
@@ -15,16 +14,15 @@ type bedrockProvider struct {
 	modelID string
 }
 
-func newBedrockProvider(cfg *gosnagconfig.Config) *bedrockProvider {
+func newBedrockProvider(region, modelID string) *bedrockProvider {
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
-		awsconfig.WithRegion(cfg.AIBedrockRegion),
+		awsconfig.WithRegion(region),
 	)
 	if err != nil {
 		return &bedrockProvider{} // will fail on Chat call
 	}
 
 	client := bedrockruntime.NewFromConfig(awsCfg)
-	modelID := cfg.AIBedrockModelID
 	if modelID == "" {
 		modelID = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
 	}

@@ -68,7 +68,7 @@ func NewProvider(cfg *config.Config) Provider {
 			name:    "groq",
 		})
 	case "bedrock":
-		return newBedrockProvider(cfg)
+		return newBedrockProvider(cfg.AIBedrockRegion, cfg.AIBedrockModelID)
 	default:
 		return nil
 	}

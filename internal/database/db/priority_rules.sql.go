@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -61,6 +62,16 @@ func (q *Queries) CreatePriorityRule(ctx context.Context, arg CreatePriorityRule
 	return i, err
 }
 
+const deleteAIPriorityEvaluationsByProject = `-- name: DeleteAIPriorityEvaluationsByProject :exec
+DELETE FROM ai_priority_evaluations
+WHERE rule_id IN (SELECT id FROM priority_rules WHERE project_id = $1)
+`
+
+func (q *Queries) DeleteAIPriorityEvaluationsByProject(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteAIPriorityEvaluationsByProject, projectID)
+	return err
+}
+
 const deletePriorityRule = `-- name: DeletePriorityRule :exec
 DELETE FROM priority_rules WHERE id = $1 AND project_id = $2
 `
@@ -73,6 +84,32 @@ type DeletePriorityRuleParams struct {
 func (q *Queries) DeletePriorityRule(ctx context.Context, arg DeletePriorityRuleParams) error {
 	_, err := q.db.ExecContext(ctx, deletePriorityRule, arg.ID, arg.ProjectID)
 	return err
+}
+
+const getAIPriorityEvaluation = `-- name: GetAIPriorityEvaluation :one
+SELECT id, issue_id, rule_id, status, points, reason, retries, created_at, updated_at FROM ai_priority_evaluations WHERE issue_id = $1 AND rule_id = $2
+`
+
+type GetAIPriorityEvaluationParams struct {
+	IssueID uuid.UUID `json:"issue_id"`
+	RuleID  uuid.UUID `json:"rule_id"`
+}
+
+func (q *Queries) GetAIPriorityEvaluation(ctx context.Context, arg GetAIPriorityEvaluationParams) (AiPriorityEvaluation, error) {
+	row := q.db.QueryRowContext(ctx, getAIPriorityEvaluation, arg.IssueID, arg.RuleID)
+	var i AiPriorityEvaluation
+	err := row.Scan(
+		&i.ID,
+		&i.IssueID,
+		&i.RuleID,
+		&i.Status,
+		&i.Points,
+		&i.Reason,
+		&i.Retries,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getIssueVelocity1h = `-- name: GetIssueVelocity1h :one
@@ -208,6 +245,55 @@ func (q *Queries) ListPriorityRules(ctx context.Context, projectID uuid.UUID) ([
 	return items, nil
 }
 
+const listRecentIssuesForContext = `-- name: ListRecentIssuesForContext :many
+SELECT id, title, level, platform, event_count, culprit, first_seen, last_seen
+FROM issues WHERE project_id = $1 AND status != 'resolved'
+ORDER BY last_seen DESC LIMIT 20
+`
+
+type ListRecentIssuesForContextRow struct {
+	ID         uuid.UUID `json:"id"`
+	Title      string    `json:"title"`
+	Level      string    `json:"level"`
+	Platform   string    `json:"platform"`
+	EventCount int32     `json:"event_count"`
+	Culprit    string    `json:"culprit"`
+	FirstSeen  time.Time `json:"first_seen"`
+	LastSeen   time.Time `json:"last_seen"`
+}
+
+func (q *Queries) ListRecentIssuesForContext(ctx context.Context, projectID uuid.UUID) ([]ListRecentIssuesForContextRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentIssuesForContext, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRecentIssuesForContextRow{}
+	for rows.Next() {
+		var i ListRecentIssuesForContextRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Level,
+			&i.Platform,
+			&i.EventCount,
+			&i.Culprit,
+			&i.FirstSeen,
+			&i.LastSeen,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateIssuePriority = `-- name: UpdateIssuePriority :exec
 UPDATE issues SET priority = $2, updated_at = now() WHERE id = $1
 `
@@ -270,6 +356,47 @@ func (q *Queries) UpdatePriorityRule(ctx context.Context, arg UpdatePriorityRule
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Conditions,
+	)
+	return i, err
+}
+
+const upsertAIPriorityEvaluation = `-- name: UpsertAIPriorityEvaluation :one
+INSERT INTO ai_priority_evaluations (issue_id, rule_id, status, points, reason, retries)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (issue_id, rule_id) DO UPDATE
+SET status = $3, points = $4, reason = $5, retries = $6, updated_at = now()
+RETURNING id, issue_id, rule_id, status, points, reason, retries, created_at, updated_at
+`
+
+type UpsertAIPriorityEvaluationParams struct {
+	IssueID uuid.UUID `json:"issue_id"`
+	RuleID  uuid.UUID `json:"rule_id"`
+	Status  string    `json:"status"`
+	Points  int32     `json:"points"`
+	Reason  string    `json:"reason"`
+	Retries int32     `json:"retries"`
+}
+
+func (q *Queries) UpsertAIPriorityEvaluation(ctx context.Context, arg UpsertAIPriorityEvaluationParams) (AiPriorityEvaluation, error) {
+	row := q.db.QueryRowContext(ctx, upsertAIPriorityEvaluation,
+		arg.IssueID,
+		arg.RuleID,
+		arg.Status,
+		arg.Points,
+		arg.Reason,
+		arg.Retries,
+	)
+	var i AiPriorityEvaluation
+	err := row.Scan(
+		&i.ID,
+		&i.IssueID,
+		&i.RuleID,
+		&i.Status,
+		&i.Points,
+		&i.Reason,
+		&i.Retries,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

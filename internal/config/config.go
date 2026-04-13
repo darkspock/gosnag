@@ -59,7 +59,8 @@ type Config struct {
 	AIModel          string
 	AIBaseURL        string
 	AIBedrockRegion  string
-	AIBedrockModelID string
+	AIBedrockModelID         string
+	AIBedrockThinkingModelID string
 	AIMaxTokensPerDay   int
 	AIMaxCallsPerMinute int
 }
@@ -113,7 +114,8 @@ func Load() (*Config, error) {
 		AIModel:             getEnv("AI_MODEL", ""),
 		AIBaseURL:           getEnv("AI_BASE_URL", ""),
 		AIBedrockRegion:     getEnv("AI_BEDROCK_REGION", getEnv("AWS_REGION", "eu-west-1")),
-		AIBedrockModelID:    getEnv("AI_BEDROCK_MODEL_ID", ""),
+		AIBedrockModelID:         getEnv("AI_BEDROCK_MODEL_ID", ""),
+		AIBedrockThinkingModelID: getEnv("AI_BEDROCK_THINKING_MODEL_ID", ""),
 		AIMaxTokensPerDay:   getEnvInt("AI_MAX_TOKENS_PER_DAY", 1000000),
 		AIMaxCallsPerMinute: getEnvInt("AI_MAX_CALLS_PER_MINUTE", 30),
 	}, nil

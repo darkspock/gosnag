@@ -104,12 +104,12 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 	}
 	uploadHandler := upload.NewHandler(uploadStorage)
 	sourceCodeHandler := sourcecode.NewHandler(queries)
-	priorityHandler := priority.NewHandler(queries)
 	tagsHandler := tags.NewHandler(queries)
 	oauthHandler := auth.NewOAuthHandler(queries, cfg)
 
 	aiService := aipkg.NewService(queries, cfg)
 	aiHandler := aipkg.NewHandler(queries, aiService, cfg)
+	priorityHandler := priority.NewHandler(queries, aiService)
 
 	alertService := alert.NewService(queries, cfg)
 
@@ -129,7 +129,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 		},
 		func(projectID uuid.UUID, iss db.Issue, eventData json.RawMessage) {
 			statsCache.Invalidate()
-			go priority.Evaluate(context.Background(), queries, projectID, iss, eventData)
+			go priority.Evaluate(context.Background(), queries, aiService, projectID, iss, eventData)
 			go tags.AutoTag(context.Background(), queries, projectID, iss, eventData)
 			go n1.ExtractAndStore(context.Background(), queries, projectID, eventData)
 		},
@@ -238,6 +238,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 					r.With(auth.RequireAdmin).Put("/{rule_id}", priorityHandler.UpdateRule)
 					r.With(auth.RequireAdmin).Delete("/{rule_id}", priorityHandler.DeleteRule)
 					r.With(auth.RequireAdmin).Post("/recalc", priorityHandler.RecalcAll)
+					r.With(auth.RequireAdmin).Post("/suggest", priorityHandler.SuggestRules)
 				})
 
 				// Tag rules per project

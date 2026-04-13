@@ -31,3 +31,22 @@ WHERE issue_id = $1 AND timestamp >= now() - interval '24 hours';
 
 -- name: ListIssueIDsByProject :many
 SELECT id FROM issues WHERE project_id = $1;
+
+-- name: GetAIPriorityEvaluation :one
+SELECT * FROM ai_priority_evaluations WHERE issue_id = $1 AND rule_id = $2;
+
+-- name: UpsertAIPriorityEvaluation :one
+INSERT INTO ai_priority_evaluations (issue_id, rule_id, status, points, reason, retries)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (issue_id, rule_id) DO UPDATE
+SET status = $3, points = $4, reason = $5, retries = $6, updated_at = now()
+RETURNING *;
+
+-- name: DeleteAIPriorityEvaluationsByProject :exec
+DELETE FROM ai_priority_evaluations
+WHERE rule_id IN (SELECT id FROM priority_rules WHERE project_id = $1);
+
+-- name: ListRecentIssuesForContext :many
+SELECT id, title, level, platform, event_count, culprit, first_seen, last_seen
+FROM issues WHERE project_id = $1 AND status != 'resolved'
+ORDER BY last_seen DESC LIMIT 20;
