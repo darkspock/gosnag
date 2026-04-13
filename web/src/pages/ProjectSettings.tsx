@@ -120,9 +120,11 @@ export default function ProjectSettings() {
   const [showTagRuleForm, setShowTagRuleForm] = useState(false)
   const [editingTagRule, setEditingTagRule] = useState<TagRule | null>(null)
   const [trName, setTrName] = useState('')
+  const [trRuleType, setTrRuleType] = useState<'pattern' | 'ai_prompt'>('pattern')
   const [trPattern, setTrPattern] = useState('')
   const [trTagKey, setTrTagKey] = useState('')
   const [trTagValue, setTrTagValue] = useState('')
+  const [trThreshold, setTrThreshold] = useState('')
   const [showDeleteTagRule, setShowDeleteTagRule] = useState<string | null>(null)
   // Tag AI assistant
   const [showTagAssistant, setShowTagAssistant] = useState(false)
@@ -849,16 +851,16 @@ export default function ProjectSettings() {
   const currentRuleType = RULE_TYPES.find(t => t.value === prRuleType)
 
   const openAddTagRule = () => {
-    setEditingTagRule(null); setTrName(''); setTrPattern(''); setTrTagKey(''); setTrTagValue('')
+    setEditingTagRule(null); setTrName(''); setTrRuleType('pattern'); setTrPattern(''); setTrTagKey(''); setTrTagValue(''); setTrThreshold('')
     setShowTagRuleForm(true)
   }
   const openEditTagRule = (r: TagRule) => {
-    setEditingTagRule(r); setTrName(r.name); setTrPattern(r.pattern); setTrTagKey(r.tag_key); setTrTagValue(r.tag_value)
+    setEditingTagRule(r); setTrName(r.name); setTrRuleType((r.rule_type || 'pattern') as 'pattern' | 'ai_prompt'); setTrPattern(r.pattern); setTrTagKey(r.tag_key); setTrTagValue(r.tag_value); setTrThreshold(r.threshold > 0 ? String(r.threshold) : '')
     setShowTagRuleForm(true)
   }
   const handleSaveTagRule = async () => {
     if (!projectId) return
-    const data = { name: trName, pattern: trPattern, tag_key: trTagKey, tag_value: trTagValue, enabled: editingTagRule ? editingTagRule.enabled : true }
+    const data = { name: trName, rule_type: trRuleType, pattern: trPattern, tag_key: trTagKey, tag_value: trTagValue, threshold: parseInt(trThreshold) || 0, enabled: editingTagRule ? editingTagRule.enabled : true }
     try {
       if (editingTagRule) await api.updateTagRule(projectId, editingTagRule.id, data)
       else await api.createTagRule(projectId, data)
@@ -1788,7 +1790,7 @@ export default function ProjectSettings() {
                                 {r.enabled ? 'Active' : 'Disabled'}
                               </button>
                               <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary/80">
-                                {r.tag_key}:{r.tag_value}
+                                {r.rule_type === 'ai_prompt' ? `${r.tag_key}:*` : `${r.tag_key}:${r.tag_value}`}
                               </span>
                             </div>
                             {isAdmin && (
@@ -1798,7 +1800,19 @@ export default function ProjectSettings() {
                               </div>
                             )}
                           </div>
-                          <p className="mt-1 text-xs text-muted-foreground font-mono">pattern: {r.pattern}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {r.rule_type === 'ai_prompt' ? (
+                              <>
+                                <span className="inline-flex items-center gap-1 rounded bg-purple-500/15 text-purple-400 px-1.5 py-0.5 mr-1">
+                                  <Sparkles className="h-3 w-3" /> AI
+                                </span>
+                                {r.pattern.length > 60 ? r.pattern.slice(0, 60) + '...' : r.pattern}
+                                {r.threshold > 0 && <span className="ml-2 text-muted-foreground/60">at {r.threshold} events</span>}
+                              </>
+                            ) : (
+                              <span className="font-mono">pattern: {r.pattern}</span>
+                            )}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -1815,19 +1829,52 @@ export default function ProjectSettings() {
                       <label className="text-sm font-medium">Name</label>
                       <Input value={trName} onChange={e => setTrName(e.target.value)} placeholder="e.g. Payment errors" className="mt-1" />
                     </div>
-                    <div>
-                      <label className="text-sm font-medium">Title pattern</label>
-                      <Input value={trPattern} onChange={e => setTrPattern(e.target.value)} placeholder="e.g. Adyen|Stripe|payment" className="mt-1" />
-                      <p className="mt-1 text-xs text-muted-foreground">Plain text = contains match. Supports regex.</p>
-                    </div>
+                    {aiEnabled && aiProviderConfigured && (
+                      <div>
+                        <label className="text-sm font-medium">Type</label>
+                        <Select value={trRuleType} onChange={e => setTrRuleType(e.target.value as 'pattern' | 'ai_prompt')} className="mt-1">
+                          <option value="pattern">Pattern match</option>
+                          <option value="ai_prompt">AI Classification</option>
+                        </Select>
+                      </div>
+                    )}
+                    {trRuleType === 'ai_prompt' ? (
+                      <>
+                        <div>
+                          <label className="text-sm font-medium">AI Prompt</label>
+                          <textarea
+                            value={trPattern}
+                            onChange={e => setTrPattern(e.target.value)}
+                            placeholder="e.g. Classify this error by the team responsible: payments, platform, frontend, reservations"
+                            rows={4}
+                            className="mt-1 w-full rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                          <p className="mt-1 text-xs text-muted-foreground">Describe how the AI should classify the issue. It will receive the issue title, level, platform, and latest event data.</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Event Threshold</label>
+                          <Input type="number" min={1} value={trThreshold} onChange={e => setTrThreshold(e.target.value)} placeholder="e.g. 1" className="mt-1" />
+                          <p className="mt-1 text-xs text-muted-foreground">AI evaluates when the issue reaches this many events. Use 1 for first-event triage.</p>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label className="text-sm font-medium">Title pattern</label>
+                        <Input value={trPattern} onChange={e => setTrPattern(e.target.value)} placeholder="e.g. Adyen|Stripe|payment" className="mt-1" />
+                        <p className="mt-1 text-xs text-muted-foreground">Plain text = contains match. Supports regex.</p>
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-sm font-medium">Tag key</label>
                         <Input value={trTagKey} onChange={e => setTrTagKey(e.target.value)} placeholder="e.g. team" className="mt-1" />
                       </div>
                       <div>
-                        <label className="text-sm font-medium">Tag value</label>
-                        <Input value={trTagValue} onChange={e => setTrTagValue(e.target.value)} placeholder="e.g. payment" className="mt-1" />
+                        <label className="text-sm font-medium">{trRuleType === 'ai_prompt' ? 'Valid values (comma-separated)' : 'Tag value'}</label>
+                        <Input value={trTagValue} onChange={e => setTrTagValue(e.target.value)} placeholder={trRuleType === 'ai_prompt' ? 'e.g. payments,platform,frontend' : 'e.g. payment'} className="mt-1" />
+                        {trRuleType === 'ai_prompt' && (
+                          <p className="mt-1 text-xs text-muted-foreground">Comma-separated list of allowed tag values. AI must pick from these.</p>
+                        )}
                       </div>
                     </div>
                     <div className="flex justify-end gap-2">

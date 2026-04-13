@@ -29,9 +29,9 @@ func (q *Queries) AddIssueTag(ctx context.Context, arg AddIssueTagParams) error 
 }
 
 const createTagRule = `-- name: CreateTagRule :one
-INSERT INTO tag_rules (project_id, name, pattern, tag_key, tag_value, enabled, conditions)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, project_id, name, pattern, tag_key, tag_value, enabled, created_at, updated_at, conditions
+INSERT INTO tag_rules (project_id, name, pattern, tag_key, tag_value, enabled, conditions, rule_type, threshold)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, project_id, name, pattern, tag_key, tag_value, enabled, created_at, updated_at, conditions, rule_type, threshold
 `
 
 type CreateTagRuleParams struct {
@@ -42,6 +42,8 @@ type CreateTagRuleParams struct {
 	TagValue   string                `json:"tag_value"`
 	Enabled    bool                  `json:"enabled"`
 	Conditions pqtype.NullRawMessage `json:"conditions"`
+	RuleType   string                `json:"rule_type"`
+	Threshold  int32                 `json:"threshold"`
 }
 
 func (q *Queries) CreateTagRule(ctx context.Context, arg CreateTagRuleParams) (TagRule, error) {
@@ -53,6 +55,8 @@ func (q *Queries) CreateTagRule(ctx context.Context, arg CreateTagRuleParams) (T
 		arg.TagValue,
 		arg.Enabled,
 		arg.Conditions,
+		arg.RuleType,
+		arg.Threshold,
 	)
 	var i TagRule
 	err := row.Scan(
@@ -66,8 +70,20 @@ func (q *Queries) CreateTagRule(ctx context.Context, arg CreateTagRuleParams) (T
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Conditions,
+		&i.RuleType,
+		&i.Threshold,
 	)
 	return i, err
+}
+
+const deleteAITagEvaluationsByProject = `-- name: DeleteAITagEvaluationsByProject :exec
+DELETE FROM ai_tag_evaluations
+WHERE rule_id IN (SELECT id FROM tag_rules WHERE project_id = $1)
+`
+
+func (q *Queries) DeleteAITagEvaluationsByProject(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteAITagEvaluationsByProject, projectID)
+	return err
 }
 
 const deleteTagRule = `-- name: DeleteTagRule :exec
@@ -82,6 +98,32 @@ type DeleteTagRuleParams struct {
 func (q *Queries) DeleteTagRule(ctx context.Context, arg DeleteTagRuleParams) error {
 	_, err := q.db.ExecContext(ctx, deleteTagRule, arg.ID, arg.ProjectID)
 	return err
+}
+
+const getAITagEvaluation = `-- name: GetAITagEvaluation :one
+SELECT id, issue_id, rule_id, status, tag_value, reason, retries, created_at, updated_at FROM ai_tag_evaluations WHERE issue_id = $1 AND rule_id = $2
+`
+
+type GetAITagEvaluationParams struct {
+	IssueID uuid.UUID `json:"issue_id"`
+	RuleID  uuid.UUID `json:"rule_id"`
+}
+
+func (q *Queries) GetAITagEvaluation(ctx context.Context, arg GetAITagEvaluationParams) (AiTagEvaluation, error) {
+	row := q.db.QueryRowContext(ctx, getAITagEvaluation, arg.IssueID, arg.RuleID)
+	var i AiTagEvaluation
+	err := row.Scan(
+		&i.ID,
+		&i.IssueID,
+		&i.RuleID,
+		&i.Status,
+		&i.TagValue,
+		&i.Reason,
+		&i.Retries,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const listDistinctTags = `-- name: ListDistinctTags :many
@@ -119,7 +161,7 @@ func (q *Queries) ListDistinctTags(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listEnabledTagRules = `-- name: ListEnabledTagRules :many
-SELECT id, project_id, name, pattern, tag_key, tag_value, enabled, created_at, updated_at, conditions FROM tag_rules WHERE project_id = $1 AND enabled = true
+SELECT id, project_id, name, pattern, tag_key, tag_value, enabled, created_at, updated_at, conditions, rule_type, threshold FROM tag_rules WHERE project_id = $1 AND enabled = true
 `
 
 func (q *Queries) ListEnabledTagRules(ctx context.Context, projectID uuid.UUID) ([]TagRule, error) {
@@ -142,6 +184,8 @@ func (q *Queries) ListEnabledTagRules(ctx context.Context, projectID uuid.UUID) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Conditions,
+			&i.RuleType,
+			&i.Threshold,
 		); err != nil {
 			return nil, err
 		}
@@ -225,7 +269,7 @@ func (q *Queries) ListIssueTags(ctx context.Context, issueID uuid.UUID) ([]Issue
 }
 
 const listTagRules = `-- name: ListTagRules :many
-SELECT id, project_id, name, pattern, tag_key, tag_value, enabled, created_at, updated_at, conditions FROM tag_rules WHERE project_id = $1 ORDER BY created_at
+SELECT id, project_id, name, pattern, tag_key, tag_value, enabled, created_at, updated_at, conditions, rule_type, threshold FROM tag_rules WHERE project_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListTagRules(ctx context.Context, projectID uuid.UUID) ([]TagRule, error) {
@@ -248,6 +292,8 @@ func (q *Queries) ListTagRules(ctx context.Context, projectID uuid.UUID) ([]TagR
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Conditions,
+			&i.RuleType,
+			&i.Threshold,
 		); err != nil {
 			return nil, err
 		}
@@ -312,9 +358,9 @@ func (q *Queries) RemoveIssueTag(ctx context.Context, arg RemoveIssueTagParams) 
 
 const updateTagRule = `-- name: UpdateTagRule :one
 UPDATE tag_rules
-SET name = $3, pattern = $4, tag_key = $5, tag_value = $6, enabled = $7, conditions = $8, updated_at = now()
+SET name = $3, pattern = $4, tag_key = $5, tag_value = $6, enabled = $7, conditions = $8, rule_type = $9, threshold = $10, updated_at = now()
 WHERE id = $1 AND project_id = $2
-RETURNING id, project_id, name, pattern, tag_key, tag_value, enabled, created_at, updated_at, conditions
+RETURNING id, project_id, name, pattern, tag_key, tag_value, enabled, created_at, updated_at, conditions, rule_type, threshold
 `
 
 type UpdateTagRuleParams struct {
@@ -326,6 +372,8 @@ type UpdateTagRuleParams struct {
 	TagValue   string                `json:"tag_value"`
 	Enabled    bool                  `json:"enabled"`
 	Conditions pqtype.NullRawMessage `json:"conditions"`
+	RuleType   string                `json:"rule_type"`
+	Threshold  int32                 `json:"threshold"`
 }
 
 func (q *Queries) UpdateTagRule(ctx context.Context, arg UpdateTagRuleParams) (TagRule, error) {
@@ -338,6 +386,8 @@ func (q *Queries) UpdateTagRule(ctx context.Context, arg UpdateTagRuleParams) (T
 		arg.TagValue,
 		arg.Enabled,
 		arg.Conditions,
+		arg.RuleType,
+		arg.Threshold,
 	)
 	var i TagRule
 	err := row.Scan(
@@ -351,6 +401,49 @@ func (q *Queries) UpdateTagRule(ctx context.Context, arg UpdateTagRuleParams) (T
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Conditions,
+		&i.RuleType,
+		&i.Threshold,
+	)
+	return i, err
+}
+
+const upsertAITagEvaluation = `-- name: UpsertAITagEvaluation :one
+INSERT INTO ai_tag_evaluations (issue_id, rule_id, status, tag_value, reason, retries)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (issue_id, rule_id) DO UPDATE
+SET status = $3, tag_value = $4, reason = $5, retries = $6, updated_at = now()
+RETURNING id, issue_id, rule_id, status, tag_value, reason, retries, created_at, updated_at
+`
+
+type UpsertAITagEvaluationParams struct {
+	IssueID  uuid.UUID `json:"issue_id"`
+	RuleID   uuid.UUID `json:"rule_id"`
+	Status   string    `json:"status"`
+	TagValue string    `json:"tag_value"`
+	Reason   string    `json:"reason"`
+	Retries  int32     `json:"retries"`
+}
+
+func (q *Queries) UpsertAITagEvaluation(ctx context.Context, arg UpsertAITagEvaluationParams) (AiTagEvaluation, error) {
+	row := q.db.QueryRowContext(ctx, upsertAITagEvaluation,
+		arg.IssueID,
+		arg.RuleID,
+		arg.Status,
+		arg.TagValue,
+		arg.Reason,
+		arg.Retries,
+	)
+	var i AiTagEvaluation
+	err := row.Scan(
+		&i.ID,
+		&i.IssueID,
+		&i.RuleID,
+		&i.Status,
+		&i.TagValue,
+		&i.Reason,
+		&i.Retries,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

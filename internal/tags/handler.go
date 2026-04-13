@@ -128,9 +128,11 @@ func (h *Handler) ListDistinctTags(w http.ResponseWriter, r *http.Request) {
 
 type TagRuleRequest struct {
 	Name       string          `json:"name"`
+	RuleType   string          `json:"rule_type"`
 	Pattern    string          `json:"pattern"`
 	TagKey     string          `json:"tag_key"`
 	TagValue   string          `json:"tag_value"`
+	Threshold  int32           `json:"threshold"`
 	Enabled    bool            `json:"enabled"`
 	Conditions json.RawMessage `json:"conditions,omitempty"`
 }
@@ -167,8 +169,16 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Name == "" || req.Pattern == "" || req.TagKey == "" || req.TagValue == "" {
-		writeError(w, http.StatusBadRequest, "name, pattern, tag_key, and tag_value are required")
+	ruleType := req.RuleType
+	if ruleType == "" {
+		ruleType = "pattern"
+	}
+	if req.Name == "" || req.TagKey == "" {
+		writeError(w, http.StatusBadRequest, "name and tag_key are required")
+		return
+	}
+	if req.Pattern == "" || req.TagValue == "" {
+		writeError(w, http.StatusBadRequest, "pattern and tag_value are required")
 		return
 	}
 	rule, err := h.queries.CreateTagRule(r.Context(), db.CreateTagRuleParams{
@@ -179,6 +189,8 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		TagValue:   req.TagValue,
 		Enabled:    req.Enabled,
 		Conditions: toNullJSON(req.Conditions),
+		RuleType:   ruleType,
+		Threshold:  req.Threshold,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create rule")
@@ -203,6 +215,10 @@ func (h *Handler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	ruleType := req.RuleType
+	if ruleType == "" {
+		ruleType = "pattern"
+	}
 	rule, err := h.queries.UpdateTagRule(r.Context(), db.UpdateTagRuleParams{
 		ID:         ruleID,
 		ProjectID:  projectID,
@@ -212,6 +228,8 @@ func (h *Handler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		TagValue:   req.TagValue,
 		Enabled:    req.Enabled,
 		Conditions: toNullJSON(req.Conditions),
+		RuleType:   ruleType,
+		Threshold:  req.Threshold,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update rule")

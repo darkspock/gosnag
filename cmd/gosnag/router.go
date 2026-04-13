@@ -133,7 +133,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 				func(pID uuid.UUID, updatedIssue db.Issue, _, _ int32) {
 					alertService.Notify(pID, updatedIssue, false)
 				})
-			go tags.AutoTag(context.Background(), queries, projectID, iss, eventData)
+			go tags.AutoTag(context.Background(), queries, aiService, projectID, iss, eventData)
 			go n1.ExtractAndStore(context.Background(), queries, projectID, eventData)
 		},
 	)

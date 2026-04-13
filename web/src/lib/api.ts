@@ -159,9 +159,9 @@ export const api = {
     request<void>(`/projects/${projectId}/issues/${issueId}/tags`, { method: 'DELETE', body: JSON.stringify({ key, value }) }),
   listDistinctTags: (projectId: string) => request<{ key: string; value: string }[]>(`/projects/${projectId}/tags`),
   listTagRules: (projectId: string) => request<TagRule[]>(`/projects/${projectId}/tag-rules`),
-  createTagRule: (projectId: string, data: { name: string; pattern: string; tag_key: string; tag_value: string; enabled: boolean }) =>
+  createTagRule: (projectId: string, data: { name: string; rule_type?: string; pattern: string; tag_key: string; tag_value: string; threshold?: number; enabled: boolean }) =>
     request<TagRule>(`/projects/${projectId}/tag-rules`, { method: 'POST', body: JSON.stringify(data) }),
-  updateTagRule: (projectId: string, ruleId: string, data: { name: string; pattern: string; tag_key: string; tag_value: string; enabled: boolean }) =>
+  updateTagRule: (projectId: string, ruleId: string, data: { name: string; rule_type?: string; pattern: string; tag_key: string; tag_value: string; threshold?: number; enabled: boolean }) =>
     request<TagRule>(`/projects/${projectId}/tag-rules/${ruleId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteTagRule: (projectId: string, ruleId: string) =>
     request<void>(`/projects/${projectId}/tag-rules/${ruleId}`, { method: 'DELETE' }),
@@ -486,9 +486,11 @@ export interface TagRule {
   id: string
   project_id: string
   name: string
+  rule_type: string
   pattern: string
   tag_key: string
   tag_value: string
+  threshold: number
   enabled: boolean
   created_at: string
   updated_at: string

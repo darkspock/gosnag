@@ -48,6 +48,18 @@ type AiPriorityEvaluation struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type AiTagEvaluation struct {
+	ID        uuid.UUID `json:"id"`
+	IssueID   uuid.UUID `json:"issue_id"`
+	RuleID    uuid.UUID `json:"rule_id"`
+	Status    string    `json:"status"`
+	TagValue  string    `json:"tag_value"`
+	Reason    string    `json:"reason"`
+	Retries   int32     `json:"retries"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type AiUsageLog struct {
 	ID             uuid.UUID      `json:"id"`
 	ProjectID      uuid.UUID      `json:"project_id"`
@@ -354,6 +366,8 @@ type TagRule struct {
 	CreatedAt  time.Time             `json:"created_at"`
 	UpdatedAt  time.Time             `json:"updated_at"`
 	Conditions pqtype.NullRawMessage `json:"conditions"`
+	RuleType   string                `json:"rule_type"`
+	Threshold  int32                 `json:"threshold"`
 }
 
 type Ticket struct {

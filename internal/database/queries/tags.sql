@@ -27,15 +27,29 @@ SELECT * FROM tag_rules WHERE project_id = $1 ORDER BY created_at;
 SELECT * FROM tag_rules WHERE project_id = $1 AND enabled = true;
 
 -- name: CreateTagRule :one
-INSERT INTO tag_rules (project_id, name, pattern, tag_key, tag_value, enabled, conditions)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO tag_rules (project_id, name, pattern, tag_key, tag_value, enabled, conditions, rule_type, threshold)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: UpdateTagRule :one
 UPDATE tag_rules
-SET name = $3, pattern = $4, tag_key = $5, tag_value = $6, enabled = $7, conditions = $8, updated_at = now()
+SET name = $3, pattern = $4, tag_key = $5, tag_value = $6, enabled = $7, conditions = $8, rule_type = $9, threshold = $10, updated_at = now()
 WHERE id = $1 AND project_id = $2
 RETURNING *;
 
 -- name: DeleteTagRule :exec
 DELETE FROM tag_rules WHERE id = $1 AND project_id = $2;
+
+-- name: GetAITagEvaluation :one
+SELECT * FROM ai_tag_evaluations WHERE issue_id = $1 AND rule_id = $2;
+
+-- name: UpsertAITagEvaluation :one
+INSERT INTO ai_tag_evaluations (issue_id, rule_id, status, tag_value, reason, retries)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (issue_id, rule_id) DO UPDATE
+SET status = $3, tag_value = $4, reason = $5, retries = $6, updated_at = now()
+RETURNING *;
+
+-- name: DeleteAITagEvaluationsByProject :exec
+DELETE FROM ai_tag_evaluations
+WHERE rule_id IN (SELECT id FROM tag_rules WHERE project_id = $1);
