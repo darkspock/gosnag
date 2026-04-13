@@ -59,6 +59,8 @@ func evaluateLeaf(node Node, ctx *EvalContext) bool {
 		return compareInt(ctx.Velocity24h(), node.Op, node.IntValue())
 	case "user_count":
 		return compareInt(ctx.UserCount(), node.Op, node.IntValue())
+	case "priority":
+		return compareInt(ctx.Issue.Priority, node.Op, node.IntValue())
 	default:
 		return false
 	}

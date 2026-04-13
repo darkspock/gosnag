@@ -162,7 +162,7 @@ func (h *Handler) RecalcAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := EvaluateAll(r.Context(), h.queries, h.aiService, projectID)
+	count, err := EvaluateAll(r.Context(), h.queries, h.aiService, projectID, nil)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to recalculate")
 		return

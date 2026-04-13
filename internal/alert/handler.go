@@ -271,6 +271,7 @@ The conditions system supports these operators:
 - velocity_1h: events in the last hour
 - velocity_24h: events in the last 24 hours
 - user_count: unique affected users
+- priority: numeric comparison on the issue's priority score (0-100, base 50). Alerts with priority conditions fire when the priority changes after rule evaluation.
 
 Conditions can be grouped with "and" / "or" operators.
 

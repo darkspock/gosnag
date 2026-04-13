@@ -129,7 +129,10 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 		},
 		func(projectID uuid.UUID, iss db.Issue, eventData json.RawMessage) {
 			statsCache.Invalidate()
-			go priority.Evaluate(context.Background(), queries, aiService, projectID, iss, eventData)
+			go priority.Evaluate(context.Background(), queries, aiService, projectID, iss, eventData,
+				func(pID uuid.UUID, updatedIssue db.Issue, _, _ int32) {
+					alertService.Notify(pID, updatedIssue, false)
+				})
 			go tags.AutoTag(context.Background(), queries, projectID, iss, eventData)
 			go n1.ExtractAndStore(context.Background(), queries, projectID, eventData)
 		},

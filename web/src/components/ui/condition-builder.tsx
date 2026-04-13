@@ -124,6 +124,17 @@ const CONDITION_TYPES: Record<string, ConditionTypeInfo> = {
       { value: 'contains', label: 'contains' },
     ],
   },
+  priority: {
+    label: 'Priority score',
+    category: 'number',
+    operators: [
+      { value: 'gte', label: '>=' },
+      { value: 'gt', label: '>' },
+      { value: 'lte', label: '<=' },
+      { value: 'lt', label: '<' },
+      { value: 'eq', label: '=' },
+    ],
+  },
 }
 
 // --- Component ---

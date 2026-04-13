@@ -55,11 +55,15 @@ func (c *velocityCache) set(key string, count int32) {
 	}
 }
 
+// OnPriorityChange is called when an issue's priority score changes.
+type OnPriorityChange func(projectID uuid.UUID, issue db.Issue, oldPriority, newPriority int32)
+
 // Evaluate calculates the priority score for an issue based on project rules.
 // Should be called asynchronously after event ingestion.
 // eventData is the raw JSON of the latest event (for full-text search in rules).
 // aiService may be nil if AI is not configured.
-func Evaluate(ctx context.Context, queries *db.Queries, aiService *ai.Service, projectID uuid.UUID, issue db.Issue, eventData json.RawMessage) {
+// onChange is called when priority actually changes (may be nil).
+func Evaluate(ctx context.Context, queries *db.Queries, aiService *ai.Service, projectID uuid.UUID, issue db.Issue, eventData json.RawMessage, onChange OnPriorityChange) {
 	rules, err := queries.ListEnabledPriorityRules(ctx, projectID)
 	if err != nil || len(rules) == 0 {
 		return
@@ -161,18 +165,22 @@ func Evaluate(ctx context.Context, queries *db.Queries, aiService *ai.Service, p
 
 	// Only update if changed
 	if score != issue.Priority {
+		oldPriority := issue.Priority
 		if err := queries.UpdateIssuePriority(ctx, db.UpdateIssuePriorityParams{
 			ID:       issue.ID,
 			Priority: score,
 		}); err != nil {
 			slog.Error("failed to update issue priority", "error", err, "issue_id", issue.ID)
+		} else if onChange != nil {
+			issue.Priority = score
+			onChange(projectID, issue, oldPriority, score)
 		}
 	}
 }
 
 // EvaluateAll recalculates priority for all issues in a project.
 // Loads rules once and reuses them across all issues to avoid N+1 queries.
-func EvaluateAll(ctx context.Context, queries *db.Queries, aiService *ai.Service, projectID uuid.UUID) (int, error) {
+func EvaluateAll(ctx context.Context, queries *db.Queries, aiService *ai.Service, projectID uuid.UUID, onChange OnPriorityChange) (int, error) {
 	rules, err := queries.ListEnabledPriorityRules(ctx, projectID)
 	if err != nil || len(rules) == 0 {
 		return 0, err
@@ -194,14 +202,14 @@ func EvaluateAll(ctx context.Context, queries *db.Queries, aiService *ai.Service
 		if err == nil && len(events) > 0 {
 			eventData = events[0].Data
 		}
-		evaluateWithRules(ctx, queries, aiService, rules, issue, eventData)
+		evaluateWithRules(ctx, queries, aiService, rules, issue, eventData, onChange)
 		count++
 	}
 	return count, nil
 }
 
 // evaluateWithRules scores an issue using pre-loaded rules (avoids reloading per issue).
-func evaluateWithRules(ctx context.Context, queries *db.Queries, aiService *ai.Service, rules []db.PriorityRule, issue db.Issue, eventData json.RawMessage) {
+func evaluateWithRules(ctx context.Context, queries *db.Queries, aiService *ai.Service, rules []db.PriorityRule, issue db.Issue, eventData json.RawMessage, onChange OnPriorityChange) {
 	eventText := string(eventData)
 	searchText := issue.Title + "\n" + eventText
 
@@ -280,11 +288,15 @@ func evaluateWithRules(ctx context.Context, queries *db.Queries, aiService *ai.S
 	}
 
 	if score != issue.Priority {
+		oldPriority := issue.Priority
 		if err := queries.UpdateIssuePriority(ctx, db.UpdateIssuePriorityParams{
 			ID:       issue.ID,
 			Priority: score,
 		}); err != nil {
 			slog.Error("failed to update issue priority", "error", err, "issue_id", issue.ID)
+		} else if onChange != nil {
+			issue.Priority = score
+			onChange(issue.ProjectID, issue, oldPriority, score)
 		}
 	}
 }

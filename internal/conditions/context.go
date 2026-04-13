@@ -20,6 +20,7 @@ type IssueData struct {
 	EventCount  int32
 	Environment string
 	Release     string
+	Priority    int32
 }
 
 // EvalContext provides data for condition evaluation with lazy loading.

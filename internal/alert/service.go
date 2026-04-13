@@ -119,6 +119,7 @@ func (s *Service) Notify(projectID uuid.UUID, issue db.Issue, isNew bool) {
 		Level:      issue.Level,
 		Platform:   issue.Platform,
 		EventCount: issue.EventCount,
+		Priority:   issue.Priority,
 	}, "", loader)
 
 	for _, ac := range configs {
