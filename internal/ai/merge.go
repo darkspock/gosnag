@@ -85,10 +85,16 @@ func (mc *MergeChecker) check(ctx context.Context) {
 			pendingSet[id] = true
 		}
 
+		evaluated := 0
 		for _, newIssue := range newIssues {
 			if pendingSet[newIssue.ID] {
 				continue
 			}
+			// Limit to 3 issues per project per cycle to avoid exhausting the rate limit
+			if evaluated >= 3 {
+				break
+			}
+			evaluated++
 
 			mc.evaluateIssue(ctx, project, newIssue, pendingSet)
 		}
