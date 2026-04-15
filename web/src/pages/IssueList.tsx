@@ -339,7 +339,7 @@ export default function IssueList() {
     <div>
       <Breadcrumb items={[
         { label: 'Projects', to: '/' },
-        ...(project?.group_name ? [{ label: project.group_name, to: '/' }] : []),
+        ...(project?.group_name && project?.group_id ? [{ label: project.group_name, to: `/?group=${project.group_id}` }] : []),
         { label: project?.name || '' },
       ]} />
 
