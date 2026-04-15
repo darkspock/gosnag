@@ -1025,6 +1025,7 @@ export default function ProjectSettings() {
     <div className="space-y-6">
       <Breadcrumb items={[
         { label: 'Projects', to: '/' },
+        ...(project?.group_name ? [{ label: project.group_name, to: '/' }] : []),
         { label: project?.name || '', to: `/projects/${projectId}` },
         { label: 'Settings' },
       ]} />

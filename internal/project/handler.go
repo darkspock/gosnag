@@ -90,6 +90,7 @@ type SafeProject struct {
 	RepoPathStrip          string    `json:"repo_path_strip"`
 	IssueDisplayMode       string    `json:"issue_display_mode"`
 	GroupID                *string   `json:"group_id"`
+	GroupName              string    `json:"group_name,omitempty"`
 	AIEnabled              bool      `json:"ai_enabled"`
 	AIModel                string    `json:"ai_model"`
 	AIMergeSuggestions     bool      `json:"ai_merge_suggestions"`
@@ -268,7 +269,18 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		legacyDSN = buildLegacyDSN(r, keys[0].PublicKey, project.ID)
 	}
 
-	writeJSON(w, http.StatusOK, ProjectResponse{SafeProject: toSafeProject(project), DSN: dsn, LegacyDSN: legacyDSN})
+	sp := toSafeProject(project)
+	if project.GroupID.Valid {
+		if groups, err := h.queries.ListProjectGroups(r.Context()); err == nil {
+			for _, g := range groups {
+				if g.ID == project.GroupID.UUID {
+					sp.GroupName = g.Name
+					break
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, ProjectResponse{SafeProject: sp, DSN: dsn, LegacyDSN: legacyDSN})
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {

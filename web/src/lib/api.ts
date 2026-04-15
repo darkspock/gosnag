@@ -362,6 +362,7 @@ export interface Project {
   repo_path_strip: string
   issue_display_mode: string
   group_id: string | null
+  group_name: string | null
   ai_enabled: boolean
   ai_model: string
   ai_merge_suggestions: boolean

@@ -339,6 +339,7 @@ export default function IssueDetail() {
     <div>
       <Breadcrumb items={[
         { label: 'Projects', to: '/' },
+        ...(project?.group_name ? [{ label: project.group_name, to: '/' }] : []),
         { label: project?.name || 'Issues', to: `/projects/${projectId}` },
         { label: issue.title },
       ]} />

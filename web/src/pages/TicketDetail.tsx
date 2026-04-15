@@ -290,6 +290,7 @@ export default function TicketDetail() {
     <div className="animate-fade-in">
       <Breadcrumb items={[
         { label: 'Projects', to: '/' },
+        ...(project?.group_name ? [{ label: project.group_name, to: '/' }] : []),
         { label: project?.name || '', to: `/projects/${projectId}` },
         { label: 'Tickets', to: `/projects/${projectId}/tickets` },
         { label: ticket.title || issueTitle || 'Ticket' },

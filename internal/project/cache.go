@@ -129,14 +129,21 @@ func buildResult(ctx context.Context, queries *db.Queries) ([]ProjectListItem, e
 		trendRows   []db.GetProjectEventTrendRow
 		releaseRows []db.GetProjectLatestReleaseRow
 		weeklyRows  []db.GetProjectWeeklyErrorsRow
+		groups      []db.ProjectGroup
 	)
 
-	wg.Add(4)
+	wg.Add(5)
 	go func() { defer wg.Done(); stats, _ = queries.GetProjectStats(ctx) }()
 	go func() { defer wg.Done(); trendRows, _ = queries.GetProjectEventTrend(ctx) }()
 	go func() { defer wg.Done(); releaseRows, _ = queries.GetProjectLatestRelease(ctx) }()
 	go func() { defer wg.Done(); weeklyRows, _ = queries.GetProjectWeeklyErrors(ctx) }()
+	go func() { defer wg.Done(); groups, _ = queries.ListProjectGroups(ctx) }()
 	wg.Wait()
+
+	groupMap := make(map[uuid.UUID]string, len(groups))
+	for _, g := range groups {
+		groupMap[g.ID] = g.Name
+	}
 
 	statsMap := make(map[uuid.UUID]db.GetProjectStatsRow, len(stats))
 	for _, s := range stats {
@@ -168,7 +175,11 @@ func buildResult(ctx context.Context, queries *db.Queries) ([]ProjectListItem, e
 
 	result := make([]ProjectListItem, len(projects))
 	for i, p := range projects {
-		item := ProjectListItem{SafeProject: toSafeProject(p), Trend: make([]int32, 14)}
+		sp := toSafeProject(p)
+		if p.GroupID.Valid {
+			sp.GroupName = groupMap[p.GroupID.UUID]
+		}
+		item := ProjectListItem{SafeProject: sp, Trend: make([]int32, 14)}
 		if s, ok := statsMap[p.ID]; ok {
 			item.TotalIssues = s.TotalIssues
 			item.OpenIssues = s.OpenIssues
