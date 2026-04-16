@@ -3,6 +3,8 @@ package project
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/darkspock/gosnag/internal/database/db"
 	"github.com/go-chi/chi/v5"
@@ -15,11 +17,42 @@ func (h *Handler) ListGroups(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list groups")
 		return
 	}
-	writeJSON(w, http.StatusOK, groups)
+	out := make([]SafeGroup, 0, len(groups))
+	for _, group := range groups {
+		out = append(out, toSafeGroup(group))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 type GroupRequest struct {
-	Name string `json:"name"`
+	Name                     string  `json:"name"`
+	DefaultSlackWebhookURL   *string `json:"default_slack_webhook_url,omitempty"`
+	ClearDefaultSlackWebhook bool    `json:"clear_default_slack_webhook_url,omitempty"`
+}
+
+type SafeGroup struct {
+	ID                        uuid.UUID `json:"id"`
+	Name                      string    `json:"name"`
+	Position                  int32     `json:"position"`
+	CreatedAt                 string    `json:"created_at"`
+	DefaultSlackWebhookURLSet bool      `json:"default_slack_webhook_url_set"`
+}
+
+func toSafeGroup(g db.ProjectGroup) SafeGroup {
+	return SafeGroup{
+		ID:                        g.ID,
+		Name:                      g.Name,
+		Position:                  g.Position,
+		CreatedAt:                 g.CreatedAt.Format(time.RFC3339),
+		DefaultSlackWebhookURLSet: g.DefaultSlackWebhookUrl != "",
+	}
+}
+
+func normalizeSlackWebhook(raw *string) string {
+	if raw == nil {
+		return ""
+	}
+	return strings.TrimSpace(*raw)
 }
 
 func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
@@ -33,12 +66,15 @@ func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.queries.CreateProjectGroup(r.Context(), req.Name)
+	group, err := h.queries.CreateProjectGroup(r.Context(), db.CreateProjectGroupParams{
+		Name:                   req.Name,
+		DefaultSlackWebhookUrl: normalizeSlackWebhook(req.DefaultSlackWebhookURL),
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create group")
 		return
 	}
-	writeJSON(w, http.StatusCreated, group)
+	writeJSON(w, http.StatusCreated, toSafeGroup(group))
 }
 
 func (h *Handler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
@@ -58,15 +94,30 @@ func (h *Handler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	existing, err := h.queries.GetProjectGroup(r.Context(), groupID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "group not found")
+		return
+	}
+
+	webhook := existing.DefaultSlackWebhookUrl
+	switch {
+	case req.ClearDefaultSlackWebhook:
+		webhook = ""
+	case req.DefaultSlackWebhookURL != nil:
+		webhook = normalizeSlackWebhook(req.DefaultSlackWebhookURL)
+	}
+
 	group, err := h.queries.UpdateProjectGroup(r.Context(), db.UpdateProjectGroupParams{
-		ID:   groupID,
-		Name: req.Name,
+		ID:                     groupID,
+		Name:                   req.Name,
+		DefaultSlackWebhookUrl: webhook,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update group")
 		return
 	}
-	writeJSON(w, http.StatusOK, group)
+	writeJSON(w, http.StatusOK, toSafeGroup(group))
 }
 
 func (h *Handler) DeleteGroup(w http.ResponseWriter, r *http.Request) {

@@ -105,6 +105,15 @@ func (s *Service) Notify(projectID uuid.UUID, issue db.Issue, isNew bool) {
 		slog.Error("failed to get project for alert", "error", err, "project_id", projectID)
 		return
 	}
+	groupSlackWebhookURL := ""
+	if project.GroupID.Valid {
+		group, err := s.queries.GetProjectGroup(ctx, project.GroupID.UUID)
+		if err != nil {
+			slog.Warn("failed to get project group for alert", "error", err, "project_id", projectID, "group_id", project.GroupID.UUID)
+		} else {
+			groupSlackWebhookURL = group.DefaultSlackWebhookUrl
+		}
+	}
 
 	action := "New issue"
 	if !isNew {
@@ -159,6 +168,9 @@ func (s *Service) Notify(projectID uuid.UUID, issue db.Issue, isNew bool) {
 			if err := json.Unmarshal(ac.Config, &slackCfg); err != nil {
 				slog.Error("invalid slack alert config", "error", err)
 				continue
+			}
+			if strings.TrimSpace(slackCfg.WebhookURL) == "" {
+				slackCfg.WebhookURL = groupSlackWebhookURL
 			}
 			go s.sendSlack(slackCfg, project, issue, action)
 		}

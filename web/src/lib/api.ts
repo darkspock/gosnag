@@ -46,8 +46,10 @@ export const api = {
 
   // Groups
   listGroups: () => request<ProjectGroup[]>('/groups'),
-  createGroup: (name: string) => request<ProjectGroup>('/groups', { method: 'POST', body: JSON.stringify({ name }) }),
-  updateGroup: (id: string, name: string) => request<ProjectGroup>(`/groups/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+  createGroup: (data: { name: string; default_slack_webhook_url?: string }) =>
+    request<ProjectGroup>('/groups', { method: 'POST', body: JSON.stringify(data) }),
+  updateGroup: (id: string, data: { name: string; default_slack_webhook_url?: string; clear_default_slack_webhook_url?: boolean }) =>
+    request<ProjectGroup>(`/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteGroup: (id: string) => request<void>(`/groups/${id}`, { method: 'DELETE' }),
 
   // Favorites
@@ -332,6 +334,7 @@ export interface ProjectGroup {
   name: string
   position: number
   created_at: string
+  default_slack_webhook_url_set: boolean
 }
 
 export interface StacktraceRules {

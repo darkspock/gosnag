@@ -4,6 +4,7 @@ import { api, type Project, type ProjectGroup } from '@/lib/api'
 import { useAuth } from '@/lib/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ProjectCardsSkeleton } from '@/components/ui/skeleton'
@@ -46,7 +47,10 @@ export default function Projects() {
   const [showCreate, setShowCreate] = useState(false)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [editingGroup, setEditingGroup] = useState<ProjectGroup | null>(null)
+  const [showDeleteGroup, setShowDeleteGroup] = useState<ProjectGroup | null>(null)
   const [groupName, setGroupName] = useState('')
+  const [groupSlackWebhook, setGroupSlackWebhook] = useState('')
+  const [clearGroupSlackWebhook, setClearGroupSlackWebhook] = useState(false)
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(true)
   const isAdmin = user?.role === 'admin'
@@ -122,20 +126,31 @@ export default function Projects() {
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) return
-    await api.createGroup(groupName.trim())
+    await api.createGroup({
+      name: groupName.trim(),
+      default_slack_webhook_url: groupSlackWebhook.trim() || undefined,
+    })
     setGroups(await api.listGroups())
     setGroupName('')
+    setGroupSlackWebhook('')
+    setClearGroupSlackWebhook(false)
     setShowCreateGroup(false)
     toast.success('Group created')
   }
 
   const handleUpdateGroup = async () => {
     if (!editingGroup || !groupName.trim()) return
-    await api.updateGroup(editingGroup.id, groupName.trim())
+    await api.updateGroup(editingGroup.id, {
+      name: groupName.trim(),
+      default_slack_webhook_url: groupSlackWebhook.trim() || undefined,
+      clear_default_slack_webhook_url: clearGroupSlackWebhook,
+    })
     setGroups(await api.listGroups())
     setGroupName('')
+    setGroupSlackWebhook('')
+    setClearGroupSlackWebhook(false)
     setEditingGroup(null)
-    toast.success('Group renamed')
+    toast.success('Group updated')
   }
 
   const handleDeleteGroup = async (id: string) => {
@@ -180,7 +195,7 @@ export default function Projects() {
         <h1 className="text-2xl font-semibold">Projects</h1>
         {isAdmin && (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setGroupName(''); setShowCreateGroup(true) }}>
+            <Button variant="outline" onClick={() => { setGroupName(''); setGroupSlackWebhook(''); setClearGroupSlackWebhook(false); setShowCreateGroup(true) }}>
               <Plus className="h-4 w-4 mr-1" /> New Group
             </Button>
             <Button onClick={() => setShowCreate(true)}>
@@ -223,13 +238,19 @@ export default function Projects() {
               {isAdmin && (
                 <div className="hidden group-hover:flex items-center gap-0.5 absolute -right-1 -top-1">
                   <button
-                    onClick={(e) => { e.stopPropagation(); setEditingGroup(g); setGroupName(g.name) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditingGroup(g)
+                      setGroupName(g.name)
+                      setGroupSlackWebhook('')
+                      setClearGroupSlackWebhook(false)
+                    }}
                     className="p-0.5 rounded bg-muted hover:bg-muted/80"
                   >
                     <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g.id) }}
+                    onClick={(e) => { e.stopPropagation(); setShowDeleteGroup(g) }}
                     className="p-0.5 rounded bg-muted hover:bg-destructive/20"
                   >
                     <X className="h-2.5 w-2.5 text-muted-foreground" />
@@ -240,7 +261,7 @@ export default function Projects() {
           ))}
           {isAdmin && (
             <button
-              onClick={() => { setGroupName(''); setShowCreateGroup(true) }}
+              onClick={() => { setGroupName(''); setGroupSlackWebhook(''); setClearGroupSlackWebhook(false); setShowCreateGroup(true) }}
               className="px-2 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -311,6 +332,18 @@ export default function Projects() {
               onKeyDown={e => e.key === 'Enter' && handleCreateGroup()}
               autoFocus
             />
+            <div>
+              <label className="text-sm font-medium">Shared Slack Webhook</label>
+              <Input
+                placeholder="https://hooks.slack.com/..."
+                value={groupSlackWebhook}
+                onChange={e => setGroupSlackWebhook(e.target.value)}
+                className="mt-1"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Optional. Projects in this group can use it as the default destination for Slack alerts.
+              </p>
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowCreateGroup(false)}>Cancel</Button>
               <Button onClick={handleCreateGroup}>Create</Button>
@@ -322,8 +355,8 @@ export default function Projects() {
       {/* Rename Group Dialog */}
       <Dialog open={!!editingGroup} onOpenChange={open => { if (!open) setEditingGroup(null) }}>
         <DialogContent>
-          <DialogTitle>Rename Group</DialogTitle>
-          <DialogDescription className="sr-only">Enter a new name for the group</DialogDescription>
+          <DialogTitle>Edit Group</DialogTitle>
+          <DialogDescription className="sr-only">Update group settings</DialogDescription>
           <div className="mt-4 space-y-4">
             <Input
               value={groupName}
@@ -331,13 +364,58 @@ export default function Projects() {
               onKeyDown={e => e.key === 'Enter' && handleUpdateGroup()}
               autoFocus
             />
+            <div>
+              <label className="text-sm font-medium">Shared Slack Webhook</label>
+              <Input
+                placeholder={editingGroup?.default_slack_webhook_url_set ? 'Leave empty to keep current webhook' : 'https://hooks.slack.com/...'}
+                value={groupSlackWebhook}
+                onChange={e => {
+                  setGroupSlackWebhook(e.target.value)
+                  if (e.target.value.trim() !== '') {
+                    setClearGroupSlackWebhook(false)
+                  }
+                }}
+                className="mt-1"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {editingGroup?.default_slack_webhook_url_set
+                  ? 'A shared webhook is already configured for this group. Enter a new one to replace it.'
+                  : 'Optional. Projects in this group can use it as the default destination for Slack alerts.'}
+              </p>
+              {editingGroup?.default_slack_webhook_url_set && (
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={clearGroupSlackWebhook}
+                    onChange={e => {
+                      setClearGroupSlackWebhook(e.target.checked)
+                      if (e.target.checked) {
+                        setGroupSlackWebhook('')
+                      }
+                    }}
+                    className="rounded border-border"
+                  />
+                  Clear shared webhook for this group
+                </label>
+              )}
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEditingGroup(null)}>Cancel</Button>
-              <Button onClick={handleUpdateGroup}>Rename</Button>
+              <Button onClick={handleUpdateGroup}>Save</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!showDeleteGroup}
+        onOpenChange={open => { if (!open) setShowDeleteGroup(null) }}
+        title="Delete Group"
+        description={`The group${showDeleteGroup ? ` "${showDeleteGroup.name}"` : ''} will be deleted. Projects inside it will remain, but they will no longer belong to any group.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => { if (showDeleteGroup) handleDeleteGroup(showDeleteGroup.id) }}
+      />
     </div>
   )
 }

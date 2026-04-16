@@ -312,10 +312,11 @@ type ProjectFavorite struct {
 }
 
 type ProjectGroup struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	Position  int32     `json:"position"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                     uuid.UUID `json:"id"`
+	Name                   string    `json:"name"`
+	Position               int32     `json:"position"`
+	CreatedAt              time.Time `json:"created_at"`
+	DefaultSlackWebhookUrl string    `json:"default_slack_webhook_url"`
 }
 
 type ProjectKey struct {

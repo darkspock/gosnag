@@ -172,6 +172,7 @@ export default function ProjectSettings() {
   const [savingGithub, setSavingGithub] = useState(false)
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
+  const aiFeaturesAvailable = aiEnabled && aiProviderConfigured
 
   // Confirm dialogs
   const [showDeleteProject, setShowDeleteProject] = useState(false)
@@ -311,6 +312,21 @@ export default function ProjectSettings() {
       setActiveSection('general')
     }
   }, [activeSection, isAdmin])
+
+  useEffect(() => {
+    if (aiFeaturesAvailable) return
+
+    if (prRuleType === 'ai_prompt') {
+      setPrRuleType('level_is')
+      setPrPattern('fatal')
+      setPrThreshold('')
+    }
+
+    if (trRuleType === 'ai_prompt') {
+      setTrRuleType('pattern')
+      setTrThreshold('')
+    }
+  }, [aiFeaturesAvailable, prRuleType, trRuleType])
 
   const handleSaveGeneral = async () => {
     if (!projectId) return
@@ -759,7 +775,6 @@ export default function ProjectSettings() {
     { value: 'user_count', label: 'Affected users', needsPattern: false, needsThreshold: true, needsPrompt: false },
     ...(aiEnabled && aiProviderConfigured ? [{ value: 'ai_prompt', label: 'AI Prompt', needsPattern: false, needsThreshold: false, needsPrompt: true }] : []),
   ]
-
   const openAddPriorityRule = () => {
     setEditingPriorityRule(null)
     setPrRuleName('')
@@ -774,7 +789,7 @@ export default function ProjectSettings() {
   const openEditPriorityRule = (r: PriorityRule) => {
     setEditingPriorityRule(r)
     setPrRuleName(r.name)
-    setPrRuleType(r.rule_type)
+    setPrRuleType(!aiFeaturesAvailable && r.rule_type === 'ai_prompt' ? 'level_is' : r.rule_type)
     setPrPattern(r.pattern)
     setPrOperator(r.operator)
     setPrThreshold(r.threshold > 0 ? String(r.threshold) : '')
@@ -890,7 +905,7 @@ export default function ProjectSettings() {
     setShowTagRuleForm(true)
   }
   const openEditTagRule = (r: TagRule) => {
-    setEditingTagRule(r); setTrName(r.name); setTrRuleType((r.rule_type || 'pattern') as 'pattern' | 'ai_prompt'); setTrPattern(r.pattern); setTrTagKey(r.tag_key); setTrTagValue(r.tag_value); setTrThreshold(r.threshold > 0 ? String(r.threshold) : '')
+    setEditingTagRule(r); setTrName(r.name); setTrRuleType(!aiFeaturesAvailable && r.rule_type === 'ai_prompt' ? 'pattern' : (r.rule_type || 'pattern') as 'pattern' | 'ai_prompt'); setTrPattern(r.pattern); setTrTagKey(r.tag_key); setTrTagValue(r.tag_value); setTrThreshold(r.threshold > 0 ? String(r.threshold) : '')
     setShowTagRuleForm(true)
   }
   const handleSaveTagRule = async () => {
@@ -969,12 +984,15 @@ export default function ProjectSettings() {
     }
   }
 
+  const selectedGroup = allGroups.find(group => group.id === selectedGroupId)
+
   const formatAlertDestination = (a: AlertConfig) => {
     if (a.alert_type === 'email') {
       return (a.config as { recipients?: string[] }).recipients?.join(', ') || ''
     }
     const cfg = a.config as { webhook_url?: string; webhook_url_set?: boolean }
     if (cfg.webhook_url_set && !cfg.webhook_url) return 'Webhook configured'
+    if (!cfg.webhook_url && selectedGroup?.default_slack_webhook_url_set) return 'Using group default webhook'
     return cfg.webhook_url || ''
   }
 
@@ -2098,7 +2116,7 @@ export default function ProjectSettings() {
                         />
                         <div>
                           <span className="text-sm font-medium">Root Cause Analysis</span>
-                          <p className="text-xs text-muted-foreground">AI-generated root cause analysis for issues (Phase 2).</p>
+                          <p className="text-xs text-muted-foreground">AI-generated root cause analysis for issues.</p>
                         </div>
                       </label>
                     </CardContent>
@@ -2839,9 +2857,20 @@ export default function ProjectSettings() {
               <Input
                 value={alertConfig}
                 onChange={e => setAlertConfig(e.target.value)}
-                placeholder={alertType === 'email' ? 'dev@example.com, ops@example.com' : 'https://hooks.slack.com/...'}
+                placeholder={
+                  alertType === 'email'
+                    ? 'dev@example.com, ops@example.com'
+                    : selectedGroup?.default_slack_webhook_url_set
+                      ? 'Optional: leave empty to use the group default webhook'
+                      : 'https://hooks.slack.com/...'
+                }
                 className="mt-1"
               />
+              {alertType === 'slack' && selectedGroup?.default_slack_webhook_url_set && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This project&apos;s group already has a shared Slack webhook. Leave this blank to use it, or enter one here to override it for this alert.
+                </p>
+              )}
             </div>
             <div>
               <label className="text-sm font-medium">Conditions</label>

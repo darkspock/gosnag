@@ -12,19 +12,25 @@ import (
 )
 
 const createProjectGroup = `-- name: CreateProjectGroup :one
-INSERT INTO project_groups (name, position)
-VALUES ($1, COALESCE((SELECT max(position) + 1 FROM project_groups), 0))
-RETURNING id, name, position, created_at
+INSERT INTO project_groups (name, position, default_slack_webhook_url)
+VALUES ($1, COALESCE((SELECT max(position) + 1 FROM project_groups), 0), $2)
+RETURNING id, name, position, created_at, default_slack_webhook_url
 `
 
-func (q *Queries) CreateProjectGroup(ctx context.Context, name string) (ProjectGroup, error) {
-	row := q.db.QueryRowContext(ctx, createProjectGroup, name)
+type CreateProjectGroupParams struct {
+	Name                   string `json:"name"`
+	DefaultSlackWebhookUrl string `json:"default_slack_webhook_url"`
+}
+
+func (q *Queries) CreateProjectGroup(ctx context.Context, arg CreateProjectGroupParams) (ProjectGroup, error) {
+	row := q.db.QueryRowContext(ctx, createProjectGroup, arg.Name, arg.DefaultSlackWebhookUrl)
 	var i ProjectGroup
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Position,
 		&i.CreatedAt,
+		&i.DefaultSlackWebhookUrl,
 	)
 	return i, err
 }
@@ -38,8 +44,29 @@ func (q *Queries) DeleteProjectGroup(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const getProjectGroup = `-- name: GetProjectGroup :one
+SELECT id, name, position, created_at, default_slack_webhook_url
+FROM project_groups
+WHERE id = $1
+`
+
+func (q *Queries) GetProjectGroup(ctx context.Context, id uuid.UUID) (ProjectGroup, error) {
+	row := q.db.QueryRowContext(ctx, getProjectGroup, id)
+	var i ProjectGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Position,
+		&i.CreatedAt,
+		&i.DefaultSlackWebhookUrl,
+	)
+	return i, err
+}
+
 const listProjectGroups = `-- name: ListProjectGroups :many
-SELECT id, name, position, created_at FROM project_groups ORDER BY position, name
+SELECT id, name, position, created_at, default_slack_webhook_url
+FROM project_groups
+ORDER BY position, name
 `
 
 func (q *Queries) ListProjectGroups(ctx context.Context) ([]ProjectGroup, error) {
@@ -56,6 +83,7 @@ func (q *Queries) ListProjectGroups(ctx context.Context) ([]ProjectGroup, error)
 			&i.Name,
 			&i.Position,
 			&i.CreatedAt,
+			&i.DefaultSlackWebhookUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -85,22 +113,28 @@ func (q *Queries) SetProjectGroup(ctx context.Context, arg SetProjectGroupParams
 }
 
 const updateProjectGroup = `-- name: UpdateProjectGroup :one
-UPDATE project_groups SET name = $2 WHERE id = $1 RETURNING id, name, position, created_at
+UPDATE project_groups
+SET name = $2,
+    default_slack_webhook_url = $3
+WHERE id = $1
+RETURNING id, name, position, created_at, default_slack_webhook_url
 `
 
 type UpdateProjectGroupParams struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
+	ID                     uuid.UUID `json:"id"`
+	Name                   string    `json:"name"`
+	DefaultSlackWebhookUrl string    `json:"default_slack_webhook_url"`
 }
 
 func (q *Queries) UpdateProjectGroup(ctx context.Context, arg UpdateProjectGroupParams) (ProjectGroup, error) {
-	row := q.db.QueryRowContext(ctx, updateProjectGroup, arg.ID, arg.Name)
+	row := q.db.QueryRowContext(ctx, updateProjectGroup, arg.ID, arg.Name, arg.DefaultSlackWebhookUrl)
 	var i ProjectGroup
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Position,
 		&i.CreatedAt,
+		&i.DefaultSlackWebhookUrl,
 	)
 	return i, err
 }
