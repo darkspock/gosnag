@@ -97,3 +97,47 @@ func TestFingerprintMessageFallback(t *testing.T) {
 		t.Fatal("different messages should produce different fingerprints")
 	}
 }
+
+func TestFingerprintExcessiveQueriesGroupsByRoute(t *testing.T) {
+	eventA := &SentryEvent{
+		Message: "Error: [ExcessiveQueries] 128 queries (126.5ms total) — /api2/GoogleMaps/v3/CreateBooking\n" +
+			"Server: CoverPHP83-API\n" +
+			"URL: POST http://www.covermanager.com/api2/GoogleMaps/v3/CreateBooking\n" +
+			`Body: {"slot":{"resources":{"party_size":4}},"user_information":{"email":"rosasafont@hotmail.com"},"idempotency_token":"14859062036507846112"}`,
+	}
+
+	eventB := &SentryEvent{
+		Message: "Error: [ExcessiveQueries] 185 queries (661.71ms total) — /api2/GoogleMaps/v3/CreateBooking\n" +
+			"Server: CoverPHP83-API\n" +
+			"URL: POST http://www.covermanager.com/api2/GoogleMaps/v3/CreateBooking\n" +
+			`Body: {"slot":{"resources":{"party_size":2}},"user_information":{"email":"jose.taracena@hotmail.com"},"idempotency_token":"12452082239147641745"}`,
+	}
+
+	if eventA.ComputeFingerprint() != eventB.ComputeFingerprint() {
+		t.Fatal("same ExcessiveQueries endpoint should produce the same fingerprint")
+	}
+
+	if got, want := eventA.IssueTitle(), "[ExcessiveQueries] POST /api2/GoogleMaps/v3/CreateBooking"; got != want {
+		t.Fatalf("unexpected issue title: got %q want %q", got, want)
+	}
+
+	if got, want := eventA.Culprit(), "POST /api2/GoogleMaps/v3/CreateBooking"; got != want {
+		t.Fatalf("unexpected culprit: got %q want %q", got, want)
+	}
+}
+
+func TestFingerprintExcessiveQueriesSeparatesRoutes(t *testing.T) {
+	eventA := &SentryEvent{
+		Message: "Error: [ExcessiveQueries] 128 queries (126.5ms total) — /api2/GoogleMaps/v3/CreateBooking\n" +
+			"URL: POST http://www.covermanager.com/api2/GoogleMaps/v3/CreateBooking",
+	}
+
+	eventB := &SentryEvent{
+		Message: "Error: [ExcessiveQueries] 130 queries (140ms total) — /api2/GoogleMaps/v3/CancelBooking\n" +
+			"URL: POST http://www.covermanager.com/api2/GoogleMaps/v3/CancelBooking",
+	}
+
+	if eventA.ComputeFingerprint() == eventB.ComputeFingerprint() {
+		t.Fatal("different ExcessiveQueries endpoints should produce different fingerprints")
+	}
+}

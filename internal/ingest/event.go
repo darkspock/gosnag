@@ -4,34 +4,35 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
 // SentryEvent represents the JSON structure sent by Sentry SDKs.
 type SentryEvent struct {
-	EventID     string                 `json:"event_id"`
-	Timestamp   any                    `json:"timestamp"` // string or float
-	Platform    string                 `json:"platform"`
-	Level       string                 `json:"level"`
-	Logger      string                 `json:"logger"`
-	Transaction string                 `json:"transaction"`
-	ServerName  string                 `json:"server_name"`
-	Release     string                 `json:"release"`
-	Dist        string                 `json:"dist"`
-	Environment string                 `json:"environment"`
-	Message     string                 `json:"message"`
-	Logentry    *LogEntry              `json:"logentry"`
-	Exception   *ExceptionData         `json:"exception"`
-	Tags        map[string]string      `json:"tags"`
-	Extra       map[string]any         `json:"extra"`
-	Fingerprint []string               `json:"fingerprint"`
-	User        map[string]any         `json:"user"`
-	Request     map[string]any         `json:"request"`
-	Contexts    map[string]any         `json:"contexts"`
-	Breadcrumbs json.RawMessage         `json:"breadcrumbs"`
-	SDK         map[string]any         `json:"sdk"`
-	Modules     map[string]string      `json:"modules"`
-	Raw         map[string]any         `json:"-"` // full raw event for storage
+	EventID     string            `json:"event_id"`
+	Timestamp   any               `json:"timestamp"` // string or float
+	Platform    string            `json:"platform"`
+	Level       string            `json:"level"`
+	Logger      string            `json:"logger"`
+	Transaction string            `json:"transaction"`
+	ServerName  string            `json:"server_name"`
+	Release     string            `json:"release"`
+	Dist        string            `json:"dist"`
+	Environment string            `json:"environment"`
+	Message     string            `json:"message"`
+	Logentry    *LogEntry         `json:"logentry"`
+	Exception   *ExceptionData    `json:"exception"`
+	Tags        map[string]string `json:"tags"`
+	Extra       map[string]any    `json:"extra"`
+	Fingerprint []string          `json:"fingerprint"`
+	User        map[string]any    `json:"user"`
+	Request     map[string]any    `json:"request"`
+	Contexts    map[string]any    `json:"contexts"`
+	Breadcrumbs json.RawMessage   `json:"breadcrumbs"`
+	SDK         map[string]any    `json:"sdk"`
+	Modules     map[string]string `json:"modules"`
+	Raw         map[string]any    `json:"-"` // full raw event for storage
 }
 
 type LogEntry struct {
@@ -119,6 +120,14 @@ func (e *SentryEvent) Title() string {
 	return "(no message)"
 }
 
+// IssueTitle returns the normalized issue title used for grouping.
+func (e *SentryEvent) IssueTitle() string {
+	if hint, ok := e.groupingHint(); ok && hint.Title != "" {
+		return hint.Title
+	}
+	return e.Title()
+}
+
 // Culprit returns a concise location string like "POST /api/v2/bookings".
 func (e *SentryEvent) Culprit() string {
 	// Prefer request method + URL
@@ -138,6 +147,9 @@ func (e *SentryEvent) Culprit() string {
 			}
 			return url
 		}
+	}
+	if hint, ok := e.groupingHint(); ok && hint.Culprit != "" {
+		return hint.Culprit
 	}
 	// Fall back to transaction (often the route)
 	if e.Transaction != "" {
@@ -197,6 +209,11 @@ func (e *SentryEvent) defaultFingerprint() string {
 		return fmt.Sprintf("%x", hasher.Sum(nil))[:32]
 	}
 
+	if hint, ok := e.groupingHint(); ok {
+		hasher.Write([]byte(hint.FingerprintKey))
+		return fmt.Sprintf("%x", hasher.Sum(nil))[:32]
+	}
+
 	// For message events: hash the template message
 	if e.Logentry != nil && e.Logentry.Message != "" {
 		hasher.Write([]byte(e.Logentry.Message))
@@ -212,4 +229,122 @@ func (e *SentryEvent) defaultFingerprint() string {
 	// Last resort: hash event_id (each event is its own issue)
 	hasher.Write([]byte(e.EventID))
 	return fmt.Sprintf("%x", hasher.Sum(nil))[:32]
+}
+
+type groupingHint struct {
+	FingerprintKey string
+	Title          string
+	Culprit        string
+}
+
+func (e *SentryEvent) groupingHint() (groupingHint, bool) {
+	source := e.groupingMessage()
+	if source == "" {
+		return groupingHint{}, false
+	}
+	if hint, ok := parseExcessiveQueriesHint(source); ok {
+		return hint, true
+	}
+	return groupingHint{}, false
+}
+
+func (e *SentryEvent) groupingMessage() string {
+	if e.Logentry != nil {
+		if e.Logentry.Formatted != "" {
+			return e.Logentry.Formatted
+		}
+		if e.Logentry.Message != "" {
+			return e.Logentry.Message
+		}
+	}
+	return e.Message
+}
+
+func parseExcessiveQueriesHint(source string) (groupingHint, bool) {
+	if !strings.Contains(source, "[ExcessiveQueries]") {
+		return groupingHint{}, false
+	}
+
+	method, path := parseMethodAndPathFromMessage(source)
+	if path == "" {
+		return groupingHint{}, false
+	}
+
+	culprit := path
+	key := "message|ExcessiveQueries|" + path
+	if method != "" {
+		culprit = method + " " + path
+		key = "message|ExcessiveQueries|" + method + "|" + path
+	}
+
+	return groupingHint{
+		FingerprintKey: key,
+		Title:          "[ExcessiveQueries] " + culprit,
+		Culprit:        culprit,
+	}, true
+}
+
+func parseMethodAndPathFromMessage(source string) (string, string) {
+	for _, line := range strings.Split(source, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "URL:") {
+			continue
+		}
+
+		rest := strings.TrimSpace(strings.TrimPrefix(line, "URL:"))
+		if rest == "" {
+			continue
+		}
+
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			continue
+		}
+
+		if len(fields) == 1 {
+			return "", normalizeURLPath(fields[0])
+		}
+
+		method := strings.ToUpper(fields[0])
+		path := normalizeURLPath(fields[1])
+		if path != "" {
+			return method, path
+		}
+	}
+
+	firstLine, _, _ := strings.Cut(source, "\n")
+	if idx := strings.LastIndex(firstLine, " — "); idx >= 0 {
+		if path := normalizeURLPath(strings.TrimSpace(firstLine[idx+len(" — "):])); path != "" {
+			return "", path
+		}
+	}
+	if idx := strings.LastIndex(firstLine, " - "); idx >= 0 {
+		if path := normalizeURLPath(strings.TrimSpace(firstLine[idx+len(" - "):])); path != "" {
+			return "", path
+		}
+	}
+
+	return "", ""
+}
+
+func normalizeURLPath(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	if u, err := url.Parse(raw); err == nil {
+		if u.Path != "" {
+			return u.Path
+		}
+	}
+
+	if idx := strings.IndexAny(raw, "?#"); idx >= 0 {
+		raw = raw[:idx]
+	}
+	if strings.HasPrefix(raw, "/") {
+		return raw
+	}
+
+	return ""
 }

@@ -173,7 +173,7 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 	// Upsert issue (create or update event count)
 	issue, err := h.queries.UpsertIssue(ctx, db.UpsertIssueParams{
 		ProjectID:    projectID,
-		Title:        event.Title(),
+		Title:        event.IssueTitle(),
 		Fingerprint:  fingerprint,
 		Level:        issueLevel,
 		Platform:     event.Platform,
