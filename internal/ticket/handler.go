@@ -283,10 +283,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		if !workflow.IsValidTransition(current.Status, *req.Status) && !req.Force {
 			valid := workflow.ValidNextStatuses(current.Status)
 			writeJSON(w, http.StatusConflict, map[string]any{
-				"error":            "non_standard_transition",
-				"message":          "Transition from '" + current.Status + "' to '" + *req.Status + "' is not standard",
+				"error":             "non_standard_transition",
+				"message":           "Transition from '" + current.Status + "' to '" + *req.Status + "' is not standard",
 				"valid_transitions": valid,
-				"can_force":        true,
+				"can_force":         true,
 			})
 			return
 		}
@@ -546,6 +546,18 @@ func (h *Handler) Counts(w http.ResponseWriter, r *http.Request) {
 	for _, r := range rows {
 		counts[r.Status] = r.Count
 	}
+
+	user := auth.GetUserFromContext(r.Context())
+	if user != nil {
+		assignedPending, err := h.queries.CountPendingTicketsAssignedToUser(r.Context(), db.CountPendingTicketsAssignedToUserParams{
+			ProjectID:  projectID,
+			AssignedTo: uuid.NullUUID{UUID: user.ID, Valid: true},
+		})
+		if err == nil {
+			counts["assigned_to_me_pending"] = assignedPending
+		}
+	}
+
 	writeJSON(w, http.StatusOK, counts)
 }
 
@@ -591,26 +603,26 @@ func ticketJSON(t db.Ticket) map[string]any {
 
 func ticketListJSON(t db.ListTicketsByProjectRow) map[string]any {
 	m := map[string]any{
-		"id":               t.ID,
-		"issue_id":         nullUUID(t.IssueID),
-		"project_id":       t.ProjectID,
-		"status":           t.Status,
-		"assigned_to":      nullUUID(t.AssignedTo),
-		"created_by":       t.CreatedBy,
-		"priority":         t.Priority,
-		"due_date":         nullTime(t.DueDate),
-		"escalated_key":    nullString(t.EscalatedKey),
-		"escalated_url":    nullString(t.EscalatedUrl),
-		"created_at":       t.CreatedAt,
-		"updated_at":       t.UpdatedAt,
-		"issue_title":      t.IssueTitle,
-		"issue_level":      t.IssueLevel,
+		"id":                t.ID,
+		"issue_id":          nullUUID(t.IssueID),
+		"project_id":        t.ProjectID,
+		"status":            t.Status,
+		"assigned_to":       nullUUID(t.AssignedTo),
+		"created_by":        t.CreatedBy,
+		"priority":          t.Priority,
+		"due_date":          nullTime(t.DueDate),
+		"escalated_key":     nullString(t.EscalatedKey),
+		"escalated_url":     nullString(t.EscalatedUrl),
+		"created_at":        t.CreatedAt,
+		"updated_at":        t.UpdatedAt,
+		"issue_title":       t.IssueTitle,
+		"issue_level":       t.IssueLevel,
 		"issue_event_count": t.IssueEventCount,
-		"issue_first_seen": nullTime(t.IssueFirstSeen),
-		"issue_last_seen":  nullTime(t.IssueLastSeen),
-		"assignee_name":    nullString(t.AssigneeName),
-		"assignee_email":   nullString(t.AssigneeEmail),
-		"assignee_avatar":  nullString(t.AssigneeAvatar),
+		"issue_first_seen":  nullTime(t.IssueFirstSeen),
+		"issue_last_seen":   nullTime(t.IssueLastSeen),
+		"assignee_name":     nullString(t.AssigneeName),
+		"assignee_email":    nullString(t.AssigneeEmail),
+		"assignee_avatar":   nullString(t.AssigneeAvatar),
 	}
 	return m
 }

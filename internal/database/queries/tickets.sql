@@ -60,3 +60,10 @@ SELECT status, count(*)::int AS count
 FROM tickets
 WHERE project_id = $1
 GROUP BY status;
+
+-- name: CountPendingTicketsAssignedToUser :one
+SELECT count(*)::int
+FROM tickets
+WHERE project_id = $1
+  AND assigned_to = $2
+  AND status NOT IN ('done', 'wontfix');

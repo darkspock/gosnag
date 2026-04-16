@@ -13,6 +13,26 @@ import (
 	"github.com/google/uuid"
 )
 
+const countPendingTicketsAssignedToUser = `-- name: CountPendingTicketsAssignedToUser :one
+SELECT count(*)::int
+FROM tickets
+WHERE project_id = $1
+  AND assigned_to = $2
+  AND status NOT IN ('done', 'wontfix')
+`
+
+type CountPendingTicketsAssignedToUserParams struct {
+	ProjectID  uuid.UUID     `json:"project_id"`
+	AssignedTo uuid.NullUUID `json:"assigned_to"`
+}
+
+func (q *Queries) CountPendingTicketsAssignedToUser(ctx context.Context, arg CountPendingTicketsAssignedToUserParams) (int32, error) {
+	row := q.db.QueryRowContext(ctx, countPendingTicketsAssignedToUser, arg.ProjectID, arg.AssignedTo)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countTicketsByProject = `-- name: CountTicketsByProject :one
 SELECT count(*) FROM tickets
 WHERE project_id = $1

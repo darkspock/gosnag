@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { ChevronLeft, ChevronRight, ChevronDown, Settings, Trash2, Filter, Search, List, AlignLeft, Bookmark, LayoutGrid, Ticket, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, Settings, Trash2, Filter, Search, List, AlignLeft, Bookmark, Ticket, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/use-toast'
 import { IssueListSkeleton } from '@/components/ui/skeleton'
@@ -93,6 +93,7 @@ export default function IssueList() {
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [releases, setReleases] = useState<string[]>([])
   const [deployHealth, setDeployHealth] = useState<DeployAnalysis | null>(null)
+  const [ticketCounts, setTicketCounts] = useState<Record<string, number>>({})
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -136,6 +137,11 @@ export default function IssueList() {
     if (!projectId) return
     api.getProject(projectId).then(p => {
       setProject(p)
+      if (p.workflow_mode === 'managed') {
+        api.getTicketCounts(projectId).then(setTicketCounts).catch(() => setTicketCounts({}))
+      } else {
+        setTicketCounts({})
+      }
       // Use project default if user hasn't manually overridden
       if (!localStorage.getItem('issue-display-mode') && p.issue_display_mode) {
         setDisplayMode(p.issue_display_mode as 'classic' | 'detailed')
@@ -240,6 +246,33 @@ export default function IssueList() {
     warnings: { active: 'bg-amber-500/10 text-amber-400', chevron: 'text-amber-400/60' },
     info: { active: 'bg-blue-500/10 text-blue-400', chevron: 'text-blue-400/60' },
   }
+
+  const totalTickets = Object.entries(ticketCounts).reduce((sum, [key, value]) => {
+    if (key === 'assigned_to_me_pending') return sum
+    return sum + value
+  }, 0)
+  const assignedPendingTickets = ticketCounts.assigned_to_me_pending || 0
+
+  const renderTicketsLink = (withTopMargin = false) => (
+    <Link
+      to={`/projects/${projectId}/tickets`}
+      className={cn(
+        'flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent/50',
+        withTopMargin && 'mt-2'
+      )}
+    >
+      <Ticket className="h-3.5 w-3.5 shrink-0" />
+      <span className="flex-1 min-w-0">Tickets</span>
+      <span className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[11px] font-medium leading-none text-foreground/80">
+        {totalTickets}
+      </span>
+      {assignedPendingTickets > 0 && (
+        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">
+          {assignedPendingTickets}
+        </span>
+      )}
+    </Link>
+  )
 
   const renderSection = (
     section: Section,
@@ -387,9 +420,13 @@ export default function IssueList() {
             <div className="border-t border-border/40" />
             {renderSection('info', 'Info', infoCounts, infoFilters)}
             <div className="border-t border-border/40">
+              {project?.workflow_mode === 'managed' && renderTicketsLink(true)}
               <Link
                 to={`/projects/${projectId}/settings`}
-                className="flex items-center gap-2 px-2 py-1.5 mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent/50"
+                className={cn(
+                  'flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent/50',
+                  project?.workflow_mode === 'managed' ? '' : 'mt-2'
+                )}
               >
                 <Settings className="h-3.5 w-3.5" />
                 Settings
@@ -412,27 +449,13 @@ export default function IssueList() {
             {renderSection('info', 'Info', infoCounts, infoFilters)}
 
             <div className="border-t border-border/40">
-              {project?.workflow_mode === 'managed' && (
-                <>
-                  <Link
-                    to={`/projects/${projectId}/tickets`}
-                    className="flex items-center gap-2 px-2 py-1.5 mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent/50"
-                  >
-                    <Ticket className="h-3.5 w-3.5" />
-                    Tickets
-                  </Link>
-                  <Link
-                    to={`/projects/${projectId}/board`}
-                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent/50"
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    Board
-                  </Link>
-                </>
-              )}
+              {project?.workflow_mode === 'managed' && renderTicketsLink(true)}
               <Link
                 to={`/projects/${projectId}/settings`}
-                className="flex items-center gap-2 px-2 py-1.5 mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent/50"
+                className={cn(
+                  'flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent/50',
+                  project?.workflow_mode === 'managed' ? '' : 'mt-2'
+                )}
               >
                 <Settings className="h-3.5 w-3.5" />
                 Settings
