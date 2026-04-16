@@ -161,6 +161,12 @@ func resolveIssueGrouping(project db.Project, event *SentryEvent) (string, strin
 	title := event.IssueTitle()
 	culprit := event.Culprit()
 
+	if project.InfoGroupingMode == "by_url" && !event.HasExceptionStacktrace() {
+		if hint, ok := event.URLGroupingHint(); ok {
+			return hashFingerprintKey(hint.FingerprintKey), title, hint.Culprit
+		}
+	}
+
 	if !isInformationalLevel(event.Level) {
 		return fingerprint, title, culprit
 	}

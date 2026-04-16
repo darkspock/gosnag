@@ -163,6 +163,14 @@ export default function ProjectSettings() {
   const [repoDefaultBranch, setRepoDefaultBranch] = useState('main')
   const [repoToken, setRepoToken] = useState('')
   const [repoPathStrip, setRepoPathStrip] = useState('')
+  const [analysisDbEnabled, setAnalysisDbEnabled] = useState(false)
+  const [analysisDbDriver, setAnalysisDbDriver] = useState('')
+  const [analysisDbDsn, setAnalysisDbDsn] = useState('')
+  const [analysisDbName, setAnalysisDbName] = useState('')
+  const [analysisDbSchema, setAnalysisDbSchema] = useState('')
+  const [analysisDbNotes, setAnalysisDbNotes] = useState('')
+  const [savingAnalysisDb, setSavingAnalysisDb] = useState(false)
+  const [testingAnalysisDb, setTestingAnalysisDb] = useState(false)
   const [stacktracePreset, setStacktracePreset] = useState('generic')
   const [stacktraceRules, setStacktraceRules] = useState<StacktraceRules>(buildStacktraceRulesPreset('generic'))
   const [repoTesting, setRepoTesting] = useState(false)
@@ -223,6 +231,12 @@ export default function ProjectSettings() {
     setRepoDefaultBranch(p.repo_default_branch || 'main')
     setRepoToken('')
     setRepoPathStrip(p.repo_path_strip || '')
+    setAnalysisDbEnabled(p.analysis_db_enabled)
+    setAnalysisDbDriver(p.analysis_db_driver || '')
+    setAnalysisDbDsn('')
+    setAnalysisDbName(p.analysis_db_name || '')
+    setAnalysisDbSchema(p.analysis_db_schema || '')
+    setAnalysisDbNotes(p.analysis_db_notes || '')
     const nextStacktraceRules = normalizeStacktraceRules(p.stacktrace_rules)
     setStacktraceRules(nextStacktraceRules)
     setStacktracePreset(nextStacktraceRules.preset || 'generic')
@@ -289,6 +303,15 @@ export default function ProjectSettings() {
     ai_auto_merge: aiAutoMerge,
     ai_ticket_description: aiTicketDescription,
     ai_root_cause: aiRootCause,
+  })
+
+  const buildAnalysisDBPayload = () => ({
+    analysis_db_enabled: analysisDbEnabled,
+    analysis_db_driver: analysisDbDriver,
+    analysis_db_dsn: analysisDbDsn,
+    analysis_db_name: analysisDbName,
+    analysis_db_schema: analysisDbSchema,
+    analysis_db_notes: analysisDbNotes,
   })
 
   const updateStacktracePatternGroup = (key: 'app_patterns' | 'framework_patterns' | 'external_patterns', value: string) => {
@@ -447,6 +470,39 @@ export default function ProjectSettings() {
       toast.error(e instanceof Error ? e.message : 'Failed to save AI settings')
     } finally {
       setSavingAI(false)
+    }
+  }
+
+  const handleSaveAnalysisDB = async () => {
+    if (!projectId) return
+    setSavingAnalysisDb(true)
+    try {
+      await api.updateProject(projectId, buildAnalysisDBPayload())
+      await refreshProject(projectId)
+      toast.success('Database analysis settings saved')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save database analysis settings')
+    } finally {
+      setSavingAnalysisDb(false)
+    }
+  }
+
+  const handleTestAnalysisDB = async () => {
+    if (!projectId) return
+    setTestingAnalysisDb(true)
+    try {
+      await api.updateProject(projectId, buildAnalysisDBPayload())
+      await refreshProject(projectId)
+      const result = await api.testDBAnalysisConnection(projectId)
+      if (result.ok) {
+        toast.success('Database analysis connection successful')
+      } else {
+        toast.error(result.error || 'Connection failed')
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Connection test failed')
+    } finally {
+      setTestingAnalysisDb(false)
     }
   }
 
@@ -1050,6 +1106,12 @@ export default function ProjectSettings() {
     (githubToken || project?.github_token_set)
   )
 
+  const canTestAnalysisDB = Boolean(
+    analysisDbEnabled &&
+    analysisDbDriver &&
+    (analysisDbDsn || project?.analysis_db_configured)
+  )
+
   const sections = [
     {
       id: 'general' as const,
@@ -1481,6 +1543,112 @@ export default function ProjectSettings() {
                     <Button onClick={handleSaveIssues} disabled={savingIssues}>
                       {savingIssues ? 'Saving...' : 'Save Stack Trace Rules'}
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Database Analysis</CardTitle>
+                  <CardDescription>
+                    Configure a dedicated read-only database connection for SQL breadcrumb analysis, N+1 heuristics, and future EXPLAIN plans.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="flex items-start justify-between gap-4 rounded-md border border-border/60 bg-muted/20 p-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Enable database analysis for this project</p>
+                      <p className="text-xs text-muted-foreground">
+                        This connection is stored separately from the ingest DSN and should use minimal, ideally read-only, permissions.
+                      </p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={analysisDbEnabled}
+                        onChange={e => setAnalysisDbEnabled(e.target.checked)}
+                        className="h-4 w-4 rounded border-input bg-background"
+                      />
+                      Enabled
+                    </label>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="text-sm font-medium">Driver</label>
+                      <Select value={analysisDbDriver} onChange={e => setAnalysisDbDriver(e.target.value)} className="mt-1">
+                        <option value="">Select driver</option>
+                        <option value="postgres">PostgreSQL</option>
+                        <option value="mysql">MySQL / MariaDB</option>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Database Name</label>
+                      <Input value={analysisDbName} onChange={e => setAnalysisDbName(e.target.value)} placeholder="Optional label for the target database" className="mt-1" />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="text-sm font-medium">Schema</label>
+                      <Input value={analysisDbSchema} onChange={e => setAnalysisDbSchema(e.target.value)} placeholder="Optional schema (for PostgreSQL)" className="mt-1" />
+                    </div>
+                    <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+                      {project?.analysis_db_configured
+                        ? 'A database analysis DSN is already stored for this project.'
+                        : 'No database analysis DSN stored yet.'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium">Connection String</label>
+                    <Input
+                      type="password"
+                      value={analysisDbDsn}
+                      onChange={e => setAnalysisDbDsn(e.target.value)}
+                      placeholder={project?.analysis_db_configured ? 'Leave blank to keep the existing DSN' : 'postgres://... or user:pass@tcp(host:3306)/db'}
+                      className="mt-1"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      The DSN is stored server-side and never returned to the browser. Leave it blank to keep the existing value.
+                    </p>
+                  </div>
+
+                  {project?.analysis_db_dsn_display && (
+                    <div>
+                      <label className="text-sm font-medium">Stored DSN</label>
+                      <code className="mt-1 block rounded bg-muted px-3 py-2 text-sm font-mono break-all">
+                        {project.analysis_db_dsn_display}
+                      </code>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Passwords are redacted in the displayed value.
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-sm font-medium">Notes</label>
+                    <textarea
+                      value={analysisDbNotes}
+                      onChange={e => setAnalysisDbNotes(e.target.value)}
+                      placeholder="Optional notes for the team: read-only user, replica hostname, schema caveats, etc."
+                      rows={3}
+                      className="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    />
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Save the connection here, then use <span className="font-medium text-foreground">Analyze</span> from issue SQL breadcrumbs.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={handleTestAnalysisDB} disabled={!canTestAnalysisDB || testingAnalysisDb}>
+                        {testingAnalysisDb ? 'Testing...' : 'Test Connection'}
+                      </Button>
+                      <Button onClick={handleSaveAnalysisDB} disabled={savingAnalysisDb}>
+                        {savingAnalysisDb ? 'Saving...' : 'Save Database Analysis Settings'}
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

@@ -31,6 +31,12 @@ SET name = $2, slug = $3, default_cooldown_minutes = $4, warning_as_error = $5,
     ai_enabled = $28, ai_model = $29, ai_merge_suggestions = $30, ai_auto_merge = $31,
     ai_anomaly_detection = $32, ai_ticket_description = $33, ai_root_cause = $34, ai_triage = $35,
     stacktrace_rules = $36,
+    analysis_db_enabled = $37,
+    analysis_db_driver = $38,
+    analysis_db_dsn = $39,
+    analysis_db_name = $40,
+    analysis_db_schema = $41,
+    analysis_db_notes = $42,
     updated_at = now()
 WHERE id = $1
 RETURNING *;

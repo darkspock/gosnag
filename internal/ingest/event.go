@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -288,7 +289,7 @@ func normalizeURLPath(raw string) string {
 
 	if u, err := url.Parse(raw); err == nil {
 		if u.Path != "" {
-			return u.Path
+			return normalizeRoutePath(u.Path)
 		}
 	}
 
@@ -296,10 +297,59 @@ func normalizeURLPath(raw string) string {
 		raw = raw[:idx]
 	}
 	if strings.HasPrefix(raw, "/") {
-		return raw
+		return normalizeRoutePath(raw)
 	}
 
 	return ""
+}
+
+func normalizeRoutePath(raw string) string {
+	cleaned := path.Clean(raw)
+	if cleaned == "." || cleaned == "" {
+		return "/"
+	}
+
+	segments := strings.Split(cleaned, "/")
+	for i := range segments {
+		if segments[i] == "" {
+			continue
+		}
+		segments[i] = normalizeRouteSegment(segments[i])
+	}
+
+	normalized := strings.Join(segments, "/")
+	if !strings.HasPrefix(normalized, "/") {
+		normalized = "/" + normalized
+	}
+	return normalized
+}
+
+var (
+	uuidSegmentRe = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	dateSegmentRe = regexp.MustCompile(`^\d{4}-\d{1,2}-\d{1,2}$`)
+	intSegmentRe  = regexp.MustCompile(`^\d+$`)
+	hexTokenRe    = regexp.MustCompile(`(?i)^[0-9a-f]{8,}$`)
+	opaqueTokenRe = regexp.MustCompile(`^[A-Za-z0-9_-]{16,}$`)
+)
+
+func normalizeRouteSegment(segment string) string {
+	switch {
+	case uuidSegmentRe.MatchString(segment):
+		return ":uuid"
+	case dateSegmentRe.MatchString(segment):
+		return ":date"
+	case intSegmentRe.MatchString(segment):
+		if len(segment) == 4 && (strings.HasPrefix(segment, "19") || strings.HasPrefix(segment, "20")) {
+			return ":year"
+		}
+		return ":int"
+	case hexTokenRe.MatchString(segment):
+		return ":id"
+	case opaqueTokenRe.MatchString(segment):
+		return ":token"
+	default:
+		return segment
+	}
 }
 
 func hashFingerprintKey(key string) string {
@@ -362,6 +412,18 @@ func (e *SentryEvent) requestMethodAndPath() (string, string) {
 
 	method, path := parseMethodAndPathFromMessage(e.groupingMessage())
 	return strings.ToUpper(strings.TrimSpace(method)), path
+}
+
+func (e *SentryEvent) HasExceptionStacktrace() bool {
+	if e.Exception == nil {
+		return false
+	}
+	for _, exc := range e.Exception.Values {
+		if exc.Stacktrace != nil && len(exc.Stacktrace.Frames) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *SentryEvent) groupingFilename() string {

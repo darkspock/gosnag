@@ -80,7 +80,7 @@ func (h *Handler) GenerateTicketDescription(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusTooManyRequests, "AI rate limit exceeded, try again in a minute")
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "AI analysis temporarily unavailable")
+		writeError(w, http.StatusServiceUnavailable, userVisibleAIError(err))
 		return
 	}
 
@@ -244,7 +244,7 @@ func (h *Handler) AnalyzeIssue(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusTooManyRequests, "AI rate limit exceeded, try again in a minute")
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "AI analysis temporarily unavailable")
+		writeError(w, http.StatusServiceUnavailable, userVisibleAIError(err))
 		return
 	}
 

@@ -62,6 +62,12 @@ type CreateProjectRequest struct {
 	AIRootCause            *bool            `json:"ai_root_cause,omitempty"`
 	AITriage               *bool            `json:"ai_triage,omitempty"`
 	StacktraceRules        *StacktraceRules `json:"stacktrace_rules,omitempty"`
+	AnalysisDBEnabled      *bool            `json:"analysis_db_enabled,omitempty"`
+	AnalysisDBDriver       *string          `json:"analysis_db_driver,omitempty"`
+	AnalysisDBDSN          *string          `json:"analysis_db_dsn,omitempty"`
+	AnalysisDBName         *string          `json:"analysis_db_name,omitempty"`
+	AnalysisDBSchema       *string          `json:"analysis_db_schema,omitempty"`
+	AnalysisDBNotes        *string          `json:"analysis_db_notes,omitempty"`
 }
 
 type StacktraceRules struct {
@@ -113,6 +119,13 @@ type SafeProject struct {
 	AIRootCause            bool            `json:"ai_root_cause"`
 	AITriage               bool            `json:"ai_triage"`
 	StacktraceRules        StacktraceRules `json:"stacktrace_rules"`
+	AnalysisDBEnabled      bool            `json:"analysis_db_enabled"`
+	AnalysisDBConfigured   bool            `json:"analysis_db_configured"`
+	AnalysisDBDriver       string          `json:"analysis_db_driver"`
+	AnalysisDBDSNDisplay   string          `json:"analysis_db_dsn_display"`
+	AnalysisDBName         string          `json:"analysis_db_name"`
+	AnalysisDBSchema       string          `json:"analysis_db_schema"`
+	AnalysisDBNotes        string          `json:"analysis_db_notes"`
 	CreatedAt              time.Time       `json:"created_at"`
 	UpdatedAt              time.Time       `json:"updated_at"`
 }
@@ -249,6 +262,13 @@ func toSafeProject(p db.Project) SafeProject {
 		AIRootCause:            p.AiRootCause,
 		AITriage:               p.AiTriage,
 		StacktraceRules:        parseStacktraceRules(p.StacktraceRules),
+		AnalysisDBEnabled:      p.AnalysisDbEnabled,
+		AnalysisDBConfigured:   strings.TrimSpace(p.AnalysisDbDsn) != "",
+		AnalysisDBDriver:       p.AnalysisDbDriver,
+		AnalysisDBDSNDisplay:   maskedAnalysisDSN(p.AnalysisDbDsn),
+		AnalysisDBName:         p.AnalysisDbName,
+		AnalysisDBSchema:       p.AnalysisDbSchema,
+		AnalysisDBNotes:        p.AnalysisDbNotes,
 		CreatedAt:              p.CreatedAt,
 		UpdatedAt:              p.UpdatedAt,
 	}
@@ -582,6 +602,31 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	analysisDBEnabled := existing.AnalysisDbEnabled
+	if req.AnalysisDBEnabled != nil {
+		analysisDBEnabled = *req.AnalysisDBEnabled
+	}
+	analysisDBDriver := existing.AnalysisDbDriver
+	if req.AnalysisDBDriver != nil {
+		analysisDBDriver = strings.TrimSpace(*req.AnalysisDBDriver)
+	}
+	analysisDBDSN := existing.AnalysisDbDsn
+	if req.AnalysisDBDSN != nil {
+		analysisDBDSN = strings.TrimSpace(*req.AnalysisDBDSN)
+	}
+	analysisDBName := existing.AnalysisDbName
+	if req.AnalysisDBName != nil {
+		analysisDBName = strings.TrimSpace(*req.AnalysisDBName)
+	}
+	analysisDBSchema := existing.AnalysisDbSchema
+	if req.AnalysisDBSchema != nil {
+		analysisDBSchema = strings.TrimSpace(*req.AnalysisDBSchema)
+	}
+	analysisDBNotes := existing.AnalysisDbNotes
+	if req.AnalysisDBNotes != nil {
+		analysisDBNotes = strings.TrimSpace(*req.AnalysisDBNotes)
+	}
+
 	project, err := h.queries.UpdateProject(r.Context(), db.UpdateProjectParams{
 		ID:                     id,
 		Name:                   name,
@@ -619,6 +664,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		AiRootCause:            aiRootCause,
 		AiTriage:               aiTriage,
 		StacktraceRules:        marshalStacktraceRules(stacktraceRules),
+		AnalysisDbEnabled:      analysisDBEnabled,
+		AnalysisDbDriver:       analysisDBDriver,
+		AnalysisDbDsn:          analysisDBDSN,
+		AnalysisDbName:         analysisDBName,
+		AnalysisDbSchema:       analysisDBSchema,
+		AnalysisDbNotes:        analysisDBNotes,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {

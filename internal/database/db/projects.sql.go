@@ -16,7 +16,7 @@ import (
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (name, slug, default_cooldown_minutes)
 VALUES ($1, $2, $3)
-RETURNING id, name, slug, default_cooldown_minutes, created_at, updated_at, warning_as_error, jira_base_url, jira_email, jira_api_token, jira_project_key, jira_issue_type, group_id, max_events_per_issue, icon, color, position, numeric_id, issue_display_mode, github_token, github_owner, github_repo, github_labels, workflow_mode, repo_provider, repo_owner, repo_name, repo_default_branch, repo_token, repo_path_strip, ai_enabled, ai_model, ai_merge_suggestions, ai_auto_merge, ai_anomaly_detection, ai_ticket_description, ai_root_cause, ai_triage, stacktrace_rules, info_grouping_mode, max_info_issues
+RETURNING *
 `
 
 type CreateProjectParams struct {
@@ -70,6 +70,12 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.StacktraceRules,
 		&i.InfoGroupingMode,
 		&i.MaxInfoIssues,
+		&i.AnalysisDbEnabled,
+		&i.AnalysisDbDriver,
+		&i.AnalysisDbDsn,
+		&i.AnalysisDbName,
+		&i.AnalysisDbSchema,
+		&i.AnalysisDbNotes,
 	)
 	return i, err
 }
@@ -116,7 +122,7 @@ func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) error {
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, name, slug, default_cooldown_minutes, created_at, updated_at, warning_as_error, jira_base_url, jira_email, jira_api_token, jira_project_key, jira_issue_type, group_id, max_events_per_issue, icon, color, position, numeric_id, issue_display_mode, github_token, github_owner, github_repo, github_labels, workflow_mode, repo_provider, repo_owner, repo_name, repo_default_branch, repo_token, repo_path_strip, ai_enabled, ai_model, ai_merge_suggestions, ai_auto_merge, ai_anomaly_detection, ai_ticket_description, ai_root_cause, ai_triage, stacktrace_rules, info_grouping_mode, max_info_issues FROM projects WHERE id = $1
+SELECT * FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error) {
@@ -164,12 +170,18 @@ func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error)
 		&i.StacktraceRules,
 		&i.InfoGroupingMode,
 		&i.MaxInfoIssues,
+		&i.AnalysisDbEnabled,
+		&i.AnalysisDbDriver,
+		&i.AnalysisDbDsn,
+		&i.AnalysisDbName,
+		&i.AnalysisDbSchema,
+		&i.AnalysisDbNotes,
 	)
 	return i, err
 }
 
 const getProjectByNumericID = `-- name: GetProjectByNumericID :one
-SELECT id, name, slug, default_cooldown_minutes, created_at, updated_at, warning_as_error, jira_base_url, jira_email, jira_api_token, jira_project_key, jira_issue_type, group_id, max_events_per_issue, icon, color, position, numeric_id, issue_display_mode, github_token, github_owner, github_repo, github_labels, workflow_mode, repo_provider, repo_owner, repo_name, repo_default_branch, repo_token, repo_path_strip, ai_enabled, ai_model, ai_merge_suggestions, ai_auto_merge, ai_anomaly_detection, ai_ticket_description, ai_root_cause, ai_triage, stacktrace_rules, info_grouping_mode, max_info_issues FROM projects WHERE numeric_id = $1
+SELECT * FROM projects WHERE numeric_id = $1
 `
 
 func (q *Queries) GetProjectByNumericID(ctx context.Context, numericID int32) (Project, error) {
@@ -217,12 +229,18 @@ func (q *Queries) GetProjectByNumericID(ctx context.Context, numericID int32) (P
 		&i.StacktraceRules,
 		&i.InfoGroupingMode,
 		&i.MaxInfoIssues,
+		&i.AnalysisDbEnabled,
+		&i.AnalysisDbDriver,
+		&i.AnalysisDbDsn,
+		&i.AnalysisDbName,
+		&i.AnalysisDbSchema,
+		&i.AnalysisDbNotes,
 	)
 	return i, err
 }
 
 const getProjectBySlug = `-- name: GetProjectBySlug :one
-SELECT id, name, slug, default_cooldown_minutes, created_at, updated_at, warning_as_error, jira_base_url, jira_email, jira_api_token, jira_project_key, jira_issue_type, group_id, max_events_per_issue, icon, color, position, numeric_id, issue_display_mode, github_token, github_owner, github_repo, github_labels, workflow_mode, repo_provider, repo_owner, repo_name, repo_default_branch, repo_token, repo_path_strip, ai_enabled, ai_model, ai_merge_suggestions, ai_auto_merge, ai_anomaly_detection, ai_ticket_description, ai_root_cause, ai_triage, stacktrace_rules, info_grouping_mode, max_info_issues FROM projects WHERE slug = $1
+SELECT * FROM projects WHERE slug = $1
 `
 
 func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (Project, error) {
@@ -270,6 +288,12 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (Project, e
 		&i.StacktraceRules,
 		&i.InfoGroupingMode,
 		&i.MaxInfoIssues,
+		&i.AnalysisDbEnabled,
+		&i.AnalysisDbDriver,
+		&i.AnalysisDbDsn,
+		&i.AnalysisDbName,
+		&i.AnalysisDbSchema,
+		&i.AnalysisDbNotes,
 	)
 	return i, err
 }
@@ -453,7 +477,7 @@ func (q *Queries) GetProjectWeeklyErrors(ctx context.Context) ([]GetProjectWeekl
 }
 
 const listAIEnabledProjects = `-- name: ListAIEnabledProjects :many
-SELECT id, name, slug, default_cooldown_minutes, created_at, updated_at, warning_as_error, jira_base_url, jira_email, jira_api_token, jira_project_key, jira_issue_type, group_id, max_events_per_issue, icon, color, position, numeric_id, issue_display_mode, github_token, github_owner, github_repo, github_labels, workflow_mode, repo_provider, repo_owner, repo_name, repo_default_branch, repo_token, repo_path_strip, ai_enabled, ai_model, ai_merge_suggestions, ai_auto_merge, ai_anomaly_detection, ai_ticket_description, ai_root_cause, ai_triage, stacktrace_rules, info_grouping_mode, max_info_issues FROM projects WHERE ai_enabled = true AND ai_merge_suggestions = true
+SELECT * FROM projects WHERE ai_enabled = true AND ai_merge_suggestions = true
 `
 
 func (q *Queries) ListAIEnabledProjects(ctx context.Context) ([]Project, error) {
@@ -507,6 +531,12 @@ func (q *Queries) ListAIEnabledProjects(ctx context.Context) ([]Project, error) 
 			&i.StacktraceRules,
 			&i.InfoGroupingMode,
 			&i.MaxInfoIssues,
+			&i.AnalysisDbEnabled,
+			&i.AnalysisDbDriver,
+			&i.AnalysisDbDsn,
+			&i.AnalysisDbName,
+			&i.AnalysisDbSchema,
+			&i.AnalysisDbNotes,
 		); err != nil {
 			return nil, err
 		}
@@ -556,7 +586,7 @@ func (q *Queries) ListProjectKeys(ctx context.Context, projectID uuid.UUID) ([]P
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, name, slug, default_cooldown_minutes, created_at, updated_at, warning_as_error, jira_base_url, jira_email, jira_api_token, jira_project_key, jira_issue_type, group_id, max_events_per_issue, icon, color, position, numeric_id, issue_display_mode, github_token, github_owner, github_repo, github_labels, workflow_mode, repo_provider, repo_owner, repo_name, repo_default_branch, repo_token, repo_path_strip, ai_enabled, ai_model, ai_merge_suggestions, ai_auto_merge, ai_anomaly_detection, ai_ticket_description, ai_root_cause, ai_triage, stacktrace_rules, info_grouping_mode, max_info_issues FROM projects ORDER BY position, created_at DESC
+SELECT * FROM projects ORDER BY position, created_at DESC
 `
 
 func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
@@ -610,6 +640,12 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 			&i.StacktraceRules,
 			&i.InfoGroupingMode,
 			&i.MaxInfoIssues,
+			&i.AnalysisDbEnabled,
+			&i.AnalysisDbDriver,
+			&i.AnalysisDbDsn,
+			&i.AnalysisDbName,
+			&i.AnalysisDbSchema,
+			&i.AnalysisDbNotes,
 		); err != nil {
 			return nil, err
 		}
@@ -640,9 +676,11 @@ SET name = $2, slug = $3, default_cooldown_minutes = $4, warning_as_error = $5,
     ai_enabled = $28, ai_model = $29, ai_merge_suggestions = $30, ai_auto_merge = $31,
     ai_anomaly_detection = $32, ai_ticket_description = $33, ai_root_cause = $34, ai_triage = $35,
     stacktrace_rules = $36,
+    analysis_db_enabled = $37, analysis_db_driver = $38, analysis_db_dsn = $39,
+    analysis_db_name = $40, analysis_db_schema = $41, analysis_db_notes = $42,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, slug, default_cooldown_minutes, created_at, updated_at, warning_as_error, jira_base_url, jira_email, jira_api_token, jira_project_key, jira_issue_type, group_id, max_events_per_issue, icon, color, position, numeric_id, issue_display_mode, github_token, github_owner, github_repo, github_labels, workflow_mode, repo_provider, repo_owner, repo_name, repo_default_branch, repo_token, repo_path_strip, ai_enabled, ai_model, ai_merge_suggestions, ai_auto_merge, ai_anomaly_detection, ai_ticket_description, ai_root_cause, ai_triage, stacktrace_rules, info_grouping_mode, max_info_issues
+RETURNING *
 `
 
 type UpdateProjectParams struct {
@@ -682,6 +720,12 @@ type UpdateProjectParams struct {
 	AiRootCause            bool            `json:"ai_root_cause"`
 	AiTriage               bool            `json:"ai_triage"`
 	StacktraceRules        json.RawMessage `json:"stacktrace_rules"`
+	AnalysisDbEnabled      bool            `json:"analysis_db_enabled"`
+	AnalysisDbDriver       string          `json:"analysis_db_driver"`
+	AnalysisDbDsn          string          `json:"analysis_db_dsn"`
+	AnalysisDbName         string          `json:"analysis_db_name"`
+	AnalysisDbSchema       string          `json:"analysis_db_schema"`
+	AnalysisDbNotes        string          `json:"analysis_db_notes"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -722,6 +766,12 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.AiRootCause,
 		arg.AiTriage,
 		arg.StacktraceRules,
+		arg.AnalysisDbEnabled,
+		arg.AnalysisDbDriver,
+		arg.AnalysisDbDsn,
+		arg.AnalysisDbName,
+		arg.AnalysisDbSchema,
+		arg.AnalysisDbNotes,
 	)
 	var i Project
 	err := row.Scan(
@@ -766,6 +816,12 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.StacktraceRules,
 		&i.InfoGroupingMode,
 		&i.MaxInfoIssues,
+		&i.AnalysisDbEnabled,
+		&i.AnalysisDbDriver,
+		&i.AnalysisDbDsn,
+		&i.AnalysisDbName,
+		&i.AnalysisDbSchema,
+		&i.AnalysisDbNotes,
 	)
 	return i, err
 }

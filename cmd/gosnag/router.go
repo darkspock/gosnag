@@ -195,6 +195,7 @@ func setupRouter(database *sql.DB, cfg *config.Config) http.Handler {
 				r.Get("/", projectHandler.Get)
 				r.With(auth.RequireAdmin).Put("/", projectHandler.Update)
 				r.With(auth.RequireAdmin).Delete("/", projectHandler.Delete)
+				r.With(auth.RequireAdmin).Post("/db-analysis/test", projectHandler.TestDBAnalysisConnection)
 
 				// API Tokens per project
 				r.Route("/tokens", func(r chi.Router) {

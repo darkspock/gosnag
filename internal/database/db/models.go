@@ -303,6 +303,12 @@ type Project struct {
 	StacktraceRules        json.RawMessage `json:"stacktrace_rules"`
 	InfoGroupingMode       string          `json:"info_grouping_mode"`
 	MaxInfoIssues          int32           `json:"max_info_issues"`
+	AnalysisDbEnabled      bool            `json:"analysis_db_enabled"`
+	AnalysisDbDriver       string          `json:"analysis_db_driver"`
+	AnalysisDbDsn          string          `json:"analysis_db_dsn"`
+	AnalysisDbName         string          `json:"analysis_db_name"`
+	AnalysisDbSchema       string          `json:"analysis_db_schema"`
+	AnalysisDbNotes        string          `json:"analysis_db_notes"`
 }
 
 type ProjectFavorite struct {

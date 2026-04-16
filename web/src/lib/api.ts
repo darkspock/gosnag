@@ -64,6 +64,8 @@ export const api = {
     request<ProjectWithDSN>('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id: string, data: Record<string, unknown>) =>
     request<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  testDBAnalysisConnection: (projectId: string) =>
+    request<{ ok: boolean; error?: string }>(`/projects/${projectId}/db-analysis/test`, { method: 'POST' }),
   reorderProjects: (items: { id: string; position: number }[]) =>
     request<void>('/projects/reorder', { method: 'PUT', body: JSON.stringify(items) }),
   deleteProject: (id: string) =>
@@ -385,6 +387,13 @@ export interface Project {
   ai_root_cause: boolean
   ai_triage: boolean
   stacktrace_rules: StacktraceRules
+  analysis_db_enabled: boolean
+  analysis_db_configured: boolean
+  analysis_db_driver: string
+  analysis_db_dsn_display: string
+  analysis_db_name: string
+  analysis_db_schema: string
+  analysis_db_notes: string
   created_at: string
   total_issues?: number
   open_issues?: number

@@ -1,6 +1,10 @@
 package ingest
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/darkspock/gosnag/internal/database/db"
+)
 
 func boolPtr(v bool) *bool { return &v }
 
@@ -132,6 +136,48 @@ func TestURLGroupingHintFallsBackToMessageURL(t *testing.T) {
 
 	if got, want := hint.FingerprintKey, "info:url|POST|/api2/GoogleMaps/v3/CreateBooking"; got != want {
 		t.Fatalf("unexpected fingerprint key: got %q want %q", got, want)
+	}
+}
+
+func TestURLGroupingHintNormalizesFrameworkParams(t *testing.T) {
+	event := &SentryEvent{
+		Request: map[string]any{
+			"method": "get",
+			"url":    "http://www.covermanager.com/coverApp/Reserv/getCalendar/4/2026",
+		},
+	}
+
+	hint, ok := event.URLGroupingHint()
+	if !ok {
+		t.Fatal("expected URL grouping hint")
+	}
+
+	if got, want := hint.Culprit, "GET /coverApp/Reserv/getCalendar/:int/:year"; got != want {
+		t.Fatalf("unexpected culprit: got %q want %q", got, want)
+	}
+}
+
+func TestResolveIssueGroupingByURLForErrorWithoutException(t *testing.T) {
+	project := db.Project{InfoGroupingMode: "by_url"}
+	event := &SentryEvent{
+		Level:   "error",
+		Message: "Error: [ExcessiveQueries]\nURL: GET http://www.covermanager.com/coverApp/Reserv/getCalendar/4/2026",
+		Request: map[string]any{
+			"method": "get",
+			"url":    "http://www.covermanager.com/coverApp/Reserv/getCalendar/4/2026",
+		},
+	}
+
+	fingerprint, title, culprit := resolveIssueGrouping(project, event)
+
+	if fingerprint != hashFingerprintKey("info:url|GET|/coverApp/Reserv/getCalendar/:int/:year") {
+		t.Fatalf("unexpected fingerprint: %q", fingerprint)
+	}
+	if title != "Error: [ExcessiveQueries]\nURL: GET http://www.covermanager.com/coverApp/Reserv/getCalendar/4/2026" {
+		t.Fatalf("unexpected title: %q", title)
+	}
+	if culprit != "GET /coverApp/Reserv/getCalendar/:int/:year" {
+		t.Fatalf("unexpected culprit: %q", culprit)
 	}
 }
 
