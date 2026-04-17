@@ -158,7 +158,6 @@ func TestURLGroupingHintNormalizesFrameworkParams(t *testing.T) {
 }
 
 func TestResolveIssueGroupingByURLForErrorWithoutException(t *testing.T) {
-	project := db.Project{InfoGroupingMode: "by_url"}
 	event := &SentryEvent{
 		Level:   "error",
 		Message: "Error: [ExcessiveQueries]\nURL: GET http://www.covermanager.com/coverApp/Reserv/getCalendar/4/2026",
@@ -168,13 +167,36 @@ func TestResolveIssueGroupingByURLForErrorWithoutException(t *testing.T) {
 		},
 	}
 
-	fingerprint, title, culprit := resolveIssueGrouping(project, event, nil)
+	fingerprint, title, culprit := resolveIssueGrouping(db.Project{}.ID, event, issueSettings{ErrorGroupingMode: "by_url"}, nil)
 
 	if fingerprint != hashFingerprintKey("info:url|GET|/coverApp/Reserv/getCalendar/:int/:year") {
 		t.Fatalf("unexpected fingerprint: %q", fingerprint)
 	}
 	if title != "Error: [ExcessiveQueries]\nURL: GET http://www.covermanager.com/coverApp/Reserv/getCalendar/4/2026" {
 		t.Fatalf("unexpected title: %q", title)
+	}
+	if culprit != "GET /coverApp/Reserv/getCalendar/:int/:year" {
+		t.Fatalf("unexpected culprit: %q", culprit)
+	}
+}
+
+func TestResolveIssueGroupingByURLForWarningUsesEffectiveErrorMode(t *testing.T) {
+	event := &SentryEvent{
+		Level:   "warning",
+		Message: "Warning: [SlowRequest]\nURL: GET http://www.covermanager.com/coverApp/Reserv/getCalendar/4/2026",
+		Request: map[string]any{
+			"method": "get",
+			"url":    "http://www.covermanager.com/coverApp/Reserv/getCalendar/4/2026",
+		},
+	}
+
+	fingerprint, _, culprit := resolveIssueGrouping(db.Project{}.ID, event, issueSettings{
+		WarningAsError:    true,
+		ErrorGroupingMode: "by_url",
+	}, nil)
+
+	if fingerprint != hashFingerprintKey("info:url|GET|/coverApp/Reserv/getCalendar/:int/:year") {
+		t.Fatalf("unexpected fingerprint: %q", fingerprint)
 	}
 	if culprit != "GET /coverApp/Reserv/getCalendar/:int/:year" {
 		t.Fatalf("unexpected culprit: %q", culprit)

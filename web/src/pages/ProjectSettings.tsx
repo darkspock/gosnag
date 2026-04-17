@@ -155,6 +155,8 @@ export default function ProjectSettings() {
   const [maxEventsPerIssue, setMaxEventsPerIssue] = useState('1000')
   const [maxInfoIssues, setMaxInfoIssues] = useState('0')
   const [issueDisplayMode, setIssueDisplayMode] = useState('classic')
+  const [errorGroupingMode, setErrorGroupingMode] = useState('normal')
+  const [warningGroupingMode, setWarningGroupingMode] = useState('normal')
   const [infoGroupingMode, setInfoGroupingMode] = useState('normal')
   const [workflowMode, setWorkflowMode] = useState('simple')
   const [repoProvider, setRepoProvider] = useState('')
@@ -239,6 +241,8 @@ export default function ProjectSettings() {
     setWarningAsError(p.warning_as_error)
     setMaxEventsPerIssue(String(p.max_events_per_issue ?? 1000))
     setMaxInfoIssues(String(p.max_info_issues ?? 0))
+    setErrorGroupingMode(p.error_grouping_mode || 'normal')
+    setWarningGroupingMode(p.warning_grouping_mode || 'normal')
     setInfoGroupingMode(p.info_grouping_mode || 'normal')
     setJiraBaseUrl(p.jira_base_url || '')
     setJiraEmail(p.jira_email || '')
@@ -297,6 +301,8 @@ export default function ProjectSettings() {
     max_events_per_issue: parseInt(maxEventsPerIssue) || 0,
     max_info_issues: parseInt(maxInfoIssues) || 0,
     issue_display_mode: issueDisplayMode,
+    error_grouping_mode: errorGroupingMode,
+    warning_grouping_mode: warningGroupingMode,
     info_grouping_mode: infoGroupingMode,
     route_grouping_enabled: routeGroupingEnabled,
     stacktrace_rules: stacktraceRules,
@@ -1652,10 +1658,34 @@ export default function ProjectSettings() {
                     </p>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <div>
+                      <label className="text-sm font-medium">Error Grouping</label>
+                      <Select value={errorGroupingMode} onChange={e => setErrorGroupingMode(e.target.value)} className="mt-1">
+                        <option value="normal">Normal</option>
+                        <option value="by_url">By URL</option>
+                        <option value="by_file">By file</option>
+                      </Select>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Controls how new `error` issues are fingerprinted when they do not have an exception stack trace.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium">Warning Grouping</label>
+                      <Select value={warningGroupingMode} onChange={e => setWarningGroupingMode(e.target.value)} className="mt-1">
+                        <option value="normal">Normal</option>
+                        <option value="by_url">By URL</option>
+                        <option value="by_file">By file</option>
+                      </Select>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Controls how new `warning` issues are fingerprinted. If warnings are promoted to errors above, the error grouping mode is used instead.
+                      </p>
+                    </div>
+
                     <div>
                       <label className="text-sm font-medium">Info / Debug Grouping</label>
-                      <Select value={infoGroupingMode} onChange={e => setInfoGroupingMode(e.target.value)} className="mt-1 max-w-xs">
+                      <Select value={infoGroupingMode} onChange={e => setInfoGroupingMode(e.target.value)} className="mt-1">
                         <option value="normal">Normal</option>
                         <option value="by_url">By URL</option>
                         <option value="by_file">By file</option>
@@ -1664,7 +1694,8 @@ export default function ProjectSettings() {
                         Controls how new `info` and `debug` issues are fingerprinted. Changing it affects new incoming events; existing issues keep their current fingerprint unless you merge or rebuild them.
                       </p>
                     </div>
-                    <div>
+
+                    <div className="xl:col-span-3">
                       <label className="text-sm font-medium">Max Info / Debug Issues</label>
                       <Input
                         type="number"

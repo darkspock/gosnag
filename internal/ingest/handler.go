@@ -158,9 +158,70 @@ func isInformationalLevel(level string) bool {
 	return level == "info" || level == "debug"
 }
 
-func canonicalURLGroupingHint(event *SentryEvent, project db.Project, queries *db.Queries) (groupingHint, bool) {
+type issueSettings struct {
+	WarningAsError      bool
+	MaxInfoIssues       int32
+	ErrorGroupingMode   string
+	WarningGroupingMode string
+	InfoGroupingMode    string
+}
+
+func normalizeGroupingMode(mode string) string {
+	switch mode {
+	case "by_url", "by_file":
+		return mode
+	default:
+		return "normal"
+	}
+}
+
+func loadIssueSettings(ctx context.Context, queries *db.Queries, project db.Project) issueSettings {
+	settings := issueSettings{
+		WarningAsError:      project.WarningAsError,
+		MaxInfoIssues:       project.MaxInfoIssues,
+		ErrorGroupingMode:   normalizeGroupingMode(project.InfoGroupingMode),
+		WarningGroupingMode: normalizeGroupingMode(project.InfoGroupingMode),
+		InfoGroupingMode:    normalizeGroupingMode(project.InfoGroupingMode),
+	}
+	if queries == nil {
+		return settings
+	}
+	if err := queries.RawDB().QueryRowContext(ctx, `
+		SELECT warning_as_error, max_info_issues, error_grouping_mode, warning_grouping_mode, info_grouping_mode
+		FROM project_issue_settings
+		WHERE project_id = $1
+	`, project.ID).Scan(
+		&settings.WarningAsError,
+		&settings.MaxInfoIssues,
+		&settings.ErrorGroupingMode,
+		&settings.WarningGroupingMode,
+		&settings.InfoGroupingMode,
+	); err != nil {
+		if err != sql.ErrNoRows {
+			slog.Warn("failed to load issue settings", "project_id", project.ID, "error", err)
+		}
+		return settings
+	}
+	settings.ErrorGroupingMode = normalizeGroupingMode(settings.ErrorGroupingMode)
+	settings.WarningGroupingMode = normalizeGroupingMode(settings.WarningGroupingMode)
+	settings.InfoGroupingMode = normalizeGroupingMode(settings.InfoGroupingMode)
+	return settings
+}
+
+func groupingModeForLevel(level string, settings issueSettings) string {
+	switch level {
+	case "error", "fatal":
+		return settings.ErrorGroupingMode
+	case "warning":
+		return settings.WarningGroupingMode
+	default:
+		return settings.InfoGroupingMode
+	}
+}
+
+func canonicalURLGroupingHint(event *SentryEvent, projectID uuid.UUID, groupingMode string, queries *db.Queries) (groupingHint, bool) {
 	hint, ok := event.URLGroupingHint()
-	if !ok || project.InfoGroupingMode != "by_url" || queries == nil {
+	if !ok || groupingMode != "by_url" || queries == nil {
 		return hint, ok
 	}
 
@@ -168,7 +229,7 @@ func canonicalURLGroupingHint(event *SentryEvent, project db.Project, queries *d
 	if currentPath == "" {
 		return hint, ok
 	}
-	rule, matched, err := routegroup.FindCanonicalRoute(context.Background(), queries, project.ID, method, currentPath)
+	rule, matched, err := routegroup.FindCanonicalRoute(context.Background(), queries, projectID, method, currentPath)
 	if err != nil || !matched || rule.CanonicalPath == "" || rule.CanonicalPath == currentPath {
 		return hint, ok
 	}
@@ -182,7 +243,7 @@ func canonicalURLGroupingHint(event *SentryEvent, project db.Project, queries *d
 	}
 
 	slog.Debug("route grouping matched",
-		"project_id", project.ID,
+		"project_id", projectID,
 		"method", method,
 		"raw_url", currentPath,
 		"normalized_url", canonicalPath,
@@ -199,13 +260,14 @@ func canonicalURLGroupingHint(event *SentryEvent, project db.Project, queries *d
 	}, true
 }
 
-func resolveIssueGrouping(project db.Project, event *SentryEvent, queries *db.Queries) (string, string, string) {
+func resolveIssueGrouping(projectID uuid.UUID, event *SentryEvent, settings issueSettings, queries *db.Queries) (string, string, string) {
 	fingerprint := event.ComputeFingerprint()
 	title := event.IssueTitle()
 	culprit := event.Culprit()
+	groupingMode := groupingModeForLevel(normalizeIssueLevel(event.Level, settings.WarningAsError), settings)
 
-	if project.InfoGroupingMode == "by_url" && !event.HasExceptionStacktrace() {
-		if hint, ok := canonicalURLGroupingHint(event, project, queries); ok {
+	if groupingMode == "by_url" && !event.HasExceptionStacktrace() {
+		if hint, ok := canonicalURLGroupingHint(event, projectID, groupingMode, queries); ok {
 			return hashFingerprintKey(hint.FingerprintKey), title, hint.Culprit
 		}
 	}
@@ -214,9 +276,9 @@ func resolveIssueGrouping(project db.Project, event *SentryEvent, queries *db.Qu
 		return fingerprint, title, culprit
 	}
 
-	switch project.InfoGroupingMode {
+	switch groupingMode {
 	case "by_url":
-		if hint, ok := canonicalURLGroupingHint(event, project, queries); ok {
+		if hint, ok := canonicalURLGroupingHint(event, projectID, groupingMode, queries); ok {
 			return hashFingerprintKey(hint.FingerprintKey), hint.Title, hint.Culprit
 		}
 	case "by_file":
@@ -231,9 +293,10 @@ func resolveIssueGrouping(project db.Project, event *SentryEvent, queries *db.Qu
 func (h *Handler) processEvent(r *http.Request, project db.Project, event *SentryEvent) {
 	ctx := r.Context()
 	projectID := project.ID
-	fingerprint, issueTitle, culprit := resolveIssueGrouping(project, event, h.queries)
+	settings := loadIssueSettings(ctx, h.queries, project)
+	fingerprint, issueTitle, culprit := resolveIssueGrouping(projectID, event, settings, h.queries)
 	now := time.Now()
-	issueLevel := normalizeIssueLevel(event.Level, project.WarningAsError)
+	issueLevel := normalizeIssueLevel(event.Level, settings.WarningAsError)
 
 	// Check if this fingerprint is an alias for a merged issue
 	if alias, err := h.queries.GetIssueAlias(ctx, db.GetIssueAliasParams{
@@ -247,7 +310,7 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 		}
 	}
 
-	if isInformationalLevel(event.Level) && project.MaxInfoIssues > 0 {
+	if isInformationalLevel(event.Level) && settings.MaxInfoIssues > 0 {
 		_, err := h.queries.GetIssueByFingerprint(ctx, db.GetIssueByFingerprintParams{
 			ProjectID:   projectID,
 			Fingerprint: fingerprint,
@@ -255,7 +318,7 @@ func (h *Handler) processEvent(r *http.Request, project db.Project, event *Sentr
 		if err == sql.ErrNoRows {
 			reachedLimit, limitErr := h.queries.HasReachedInfoIssueLimit(ctx, db.HasReachedInfoIssueLimitParams{
 				ProjectID:     projectID,
-				MaxInfoIssues: project.MaxInfoIssues,
+				MaxInfoIssues: settings.MaxInfoIssues,
 			})
 			if limitErr != nil {
 				slog.Error("failed to check informational issue limit", "error", limitErr, "project_id", projectID)

@@ -13,6 +13,8 @@ type ProjectSettings struct {
 	WarningAsError       bool
 	MaxEventsPerIssue    int32
 	IssueDisplayMode     string
+	ErrorGroupingMode    string
+	WarningGroupingMode  string
 	InfoGroupingMode     string
 	MaxInfoIssues        int32
 	JiraBaseURL          string
@@ -54,6 +56,8 @@ func legacySettingsFromProject(p db.Project) ProjectSettings {
 		WarningAsError:       p.WarningAsError,
 		MaxEventsPerIssue:    p.MaxEventsPerIssue,
 		IssueDisplayMode:     p.IssueDisplayMode,
+		ErrorGroupingMode:    p.InfoGroupingMode,
+		WarningGroupingMode:  p.InfoGroupingMode,
 		InfoGroupingMode:     p.InfoGroupingMode,
 		MaxInfoIssues:        p.MaxInfoIssues,
 		JiraBaseURL:          p.JiraBaseUrl,
@@ -98,6 +102,12 @@ func (s *ProjectSettings) normalizeDefaults() {
 	if s.IssueDisplayMode == "" {
 		s.IssueDisplayMode = "classic"
 	}
+	if s.ErrorGroupingMode == "" {
+		s.ErrorGroupingMode = "normal"
+	}
+	if s.WarningGroupingMode == "" {
+		s.WarningGroupingMode = "normal"
+	}
 	if s.InfoGroupingMode == "" {
 		s.InfoGroupingMode = "normal"
 	}
@@ -123,13 +133,15 @@ func loadProjectSettings(ctx context.Context, queries *db.Queries, p db.Project)
 	rawdb := queries.RawDB()
 
 	if err := rawdb.QueryRowContext(ctx, `
-		SELECT warning_as_error, max_events_per_issue, issue_display_mode, info_grouping_mode, max_info_issues
+		SELECT warning_as_error, max_events_per_issue, issue_display_mode, error_grouping_mode, warning_grouping_mode, info_grouping_mode, max_info_issues
 		FROM project_issue_settings
 		WHERE project_id = $1
 	`, p.ID).Scan(
 		&out.WarningAsError,
 		&out.MaxEventsPerIssue,
 		&out.IssueDisplayMode,
+		&out.ErrorGroupingMode,
+		&out.WarningGroupingMode,
 		&out.InfoGroupingMode,
 		&out.MaxInfoIssues,
 	); err != nil && err != sql.ErrNoRows {
@@ -239,15 +251,17 @@ func loadProjectSettingsMap(ctx context.Context, queries *db.Queries, projects [
 	rawdb := queries.RawDB()
 
 	type issueRow struct {
-		projectID         uuid.UUID
-		warningAsError    bool
-		maxEventsPerIssue int32
-		issueDisplayMode  string
-		infoGroupingMode  string
-		maxInfoIssues     int32
+		projectID           uuid.UUID
+		warningAsError      bool
+		maxEventsPerIssue   int32
+		issueDisplayMode    string
+		errorGroupingMode   string
+		warningGroupingMode string
+		infoGroupingMode    string
+		maxInfoIssues       int32
 	}
 	rows, err := rawdb.QueryContext(ctx, `
-		SELECT project_id, warning_as_error, max_events_per_issue, issue_display_mode, info_grouping_mode, max_info_issues
+		SELECT project_id, warning_as_error, max_events_per_issue, issue_display_mode, error_grouping_mode, warning_grouping_mode, info_grouping_mode, max_info_issues
 		FROM project_issue_settings
 	`)
 	if err != nil {
@@ -255,7 +269,7 @@ func loadProjectSettingsMap(ctx context.Context, queries *db.Queries, projects [
 	}
 	for rows.Next() {
 		var row issueRow
-		if err := rows.Scan(&row.projectID, &row.warningAsError, &row.maxEventsPerIssue, &row.issueDisplayMode, &row.infoGroupingMode, &row.maxInfoIssues); err != nil {
+		if err := rows.Scan(&row.projectID, &row.warningAsError, &row.maxEventsPerIssue, &row.issueDisplayMode, &row.errorGroupingMode, &row.warningGroupingMode, &row.infoGroupingMode, &row.maxInfoIssues); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -263,6 +277,8 @@ func loadProjectSettingsMap(ctx context.Context, queries *db.Queries, projects [
 		item.WarningAsError = row.warningAsError
 		item.MaxEventsPerIssue = row.maxEventsPerIssue
 		item.IssueDisplayMode = row.issueDisplayMode
+		item.ErrorGroupingMode = row.errorGroupingMode
+		item.WarningGroupingMode = row.warningGroupingMode
 		item.InfoGroupingMode = row.infoGroupingMode
 		item.MaxInfoIssues = row.maxInfoIssues
 		result[row.projectID] = item
@@ -472,17 +488,19 @@ func saveProjectSettings(ctx context.Context, queries *db.Queries, projectID uui
 		{
 			sql: `
 				INSERT INTO project_issue_settings (
-					project_id, warning_as_error, max_events_per_issue, issue_display_mode, info_grouping_mode, max_info_issues, updated_at
-				) VALUES ($1, $2, $3, $4, $5, $6, now())
+					project_id, warning_as_error, max_events_per_issue, issue_display_mode, error_grouping_mode, warning_grouping_mode, info_grouping_mode, max_info_issues, updated_at
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
 				ON CONFLICT (project_id) DO UPDATE SET
 					warning_as_error = EXCLUDED.warning_as_error,
 					max_events_per_issue = EXCLUDED.max_events_per_issue,
 					issue_display_mode = EXCLUDED.issue_display_mode,
+					error_grouping_mode = EXCLUDED.error_grouping_mode,
+					warning_grouping_mode = EXCLUDED.warning_grouping_mode,
 					info_grouping_mode = EXCLUDED.info_grouping_mode,
 					max_info_issues = EXCLUDED.max_info_issues,
 					updated_at = now()
 			`,
-			args: []any{projectID, s.WarningAsError, s.MaxEventsPerIssue, s.IssueDisplayMode, s.InfoGroupingMode, s.MaxInfoIssues},
+			args: []any{projectID, s.WarningAsError, s.MaxEventsPerIssue, s.IssueDisplayMode, s.ErrorGroupingMode, s.WarningGroupingMode, s.InfoGroupingMode, s.MaxInfoIssues},
 		},
 		{
 			sql: `

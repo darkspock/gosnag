@@ -35,6 +35,8 @@ type CreateProjectRequest struct {
 	Icon                   *string          `json:"icon,omitempty"`
 	Color                  *string          `json:"color,omitempty"`
 	IssueDisplayMode       string           `json:"issue_display_mode"`
+	ErrorGroupingMode      string           `json:"error_grouping_mode"`
+	WarningGroupingMode    string           `json:"warning_grouping_mode"`
 	InfoGroupingMode       string           `json:"info_grouping_mode"`
 	JiraBaseURL            string           `json:"jira_base_url"`
 	JiraEmail              string           `json:"jira_email"`
@@ -92,6 +94,8 @@ type SafeProject struct {
 	Icon                   string          `json:"icon"`
 	Color                  string          `json:"color"`
 	Position               int32           `json:"position"`
+	ErrorGroupingMode      string          `json:"error_grouping_mode"`
+	WarningGroupingMode    string          `json:"warning_grouping_mode"`
 	InfoGroupingMode       string          `json:"info_grouping_mode"`
 	JiraBaseURL            string          `json:"jira_base_url"`
 	JiraEmail              string          `json:"jira_email"`
@@ -143,7 +147,7 @@ func defaultStacktraceRules() StacktraceRules {
 	}
 }
 
-func normalizeInfoGroupingMode(mode string) string {
+func normalizeIssueGroupingMode(mode string) string {
 	switch strings.TrimSpace(mode) {
 	case "by_url", "by_file":
 		return strings.TrimSpace(mode)
@@ -238,7 +242,9 @@ func toSafeProject(p db.Project, settings ProjectSettings) SafeProject {
 		Icon:                   p.Icon,
 		Color:                  p.Color,
 		Position:               p.Position,
-		InfoGroupingMode:       normalizeInfoGroupingMode(settings.InfoGroupingMode),
+		ErrorGroupingMode:      normalizeIssueGroupingMode(settings.ErrorGroupingMode),
+		WarningGroupingMode:    normalizeIssueGroupingMode(settings.WarningGroupingMode),
+		InfoGroupingMode:       normalizeIssueGroupingMode(settings.InfoGroupingMode),
 		JiraBaseURL:            settings.JiraBaseURL,
 		JiraEmail:              settings.JiraEmail,
 		JiraAPITokenSet:        settings.JiraAPIToken != "",
@@ -577,9 +583,19 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		issueDisplayMode = req.IssueDisplayMode
 	}
 
-	infoGroupingMode := normalizeInfoGroupingMode(existingSettings.InfoGroupingMode)
+	errorGroupingMode := normalizeIssueGroupingMode(existingSettings.ErrorGroupingMode)
+	if req.ErrorGroupingMode != "" {
+		errorGroupingMode = normalizeIssueGroupingMode(req.ErrorGroupingMode)
+	}
+
+	warningGroupingMode := normalizeIssueGroupingMode(existingSettings.WarningGroupingMode)
+	if req.WarningGroupingMode != "" {
+		warningGroupingMode = normalizeIssueGroupingMode(req.WarningGroupingMode)
+	}
+
+	infoGroupingMode := normalizeIssueGroupingMode(existingSettings.InfoGroupingMode)
 	if req.InfoGroupingMode != "" {
-		infoGroupingMode = normalizeInfoGroupingMode(req.InfoGroupingMode)
+		infoGroupingMode = normalizeIssueGroupingMode(req.InfoGroupingMode)
 	}
 
 	aiEnabled := existingSettings.AIEnabled
@@ -733,6 +749,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		WarningAsError:       warningAsError,
 		MaxEventsPerIssue:    maxEvents,
 		IssueDisplayMode:     issueDisplayMode,
+		ErrorGroupingMode:    errorGroupingMode,
+		WarningGroupingMode:  warningGroupingMode,
 		InfoGroupingMode:     infoGroupingMode,
 		MaxInfoIssues:        maxInfoIssues,
 		JiraBaseURL:          jiraBaseURL,
@@ -803,6 +821,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		WarningAsError:       warningAsError,
 		MaxEventsPerIssue:    maxEvents,
 		IssueDisplayMode:     issueDisplayMode,
+		ErrorGroupingMode:    errorGroupingMode,
+		WarningGroupingMode:  warningGroupingMode,
 		InfoGroupingMode:     infoGroupingMode,
 		MaxInfoIssues:        maxInfoIssues,
 		JiraBaseURL:          jiraBaseURL,

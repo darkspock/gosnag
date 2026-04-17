@@ -371,6 +371,8 @@ export interface Project {
   icon: string
   color: string
   position: number
+  error_grouping_mode: string
+  warning_grouping_mode: string
   info_grouping_mode: string
   jira_base_url: string
   jira_email: string

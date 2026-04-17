@@ -1306,6 +1306,15 @@ function hasDBQueryBreadcrumbs(values?: BreadcrumbValue[]) {
   })
 }
 
+const SQL_PREVIEW_LIMIT = 900
+
+function truncateSQLPreview(sql?: string) {
+  if (!sql) return ''
+  const normalized = sql.trim()
+  if (normalized.length <= SQL_PREVIEW_LIMIT) return normalized
+  return `${normalized.slice(0, SQL_PREVIEW_LIMIT)}...`
+}
+
 function BreadcrumbsSection({
   breadcrumbs,
   project,
@@ -1322,7 +1331,19 @@ function BreadcrumbsSection({
   const values = breadcrumbs?.values || []
   const [analysis, setAnalysis] = useState<DBQueryAnalysis | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
+  const [expandedSQL, setExpandedSQL] = useState<string | null>(null)
   const sqlBreadcrumbs = hasDBQueryBreadcrumbs(values)
+
+  const normalizeDBQueryAnalysis = (value: DBQueryAnalysis): DBQueryAnalysis => ({
+    ...value,
+    queries: Array.isArray(value.queries)
+      ? value.queries.map(query => ({
+          ...query,
+          explain_warnings: Array.isArray(query.explain_warnings) ? query.explain_warnings : [],
+        }))
+      : [],
+    warnings: Array.isArray(value.warnings) ? value.warnings : [],
+  })
 
   if (!values.length) return null
 
@@ -1331,7 +1352,7 @@ function BreadcrumbsSection({
     setAnalyzing(true)
     try {
       const result = await api.analyzeIssueDBQueries(projectId, issueId)
-      setAnalysis(result)
+      setAnalysis(normalizeDBQueryAnalysis(result))
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to analyze SQL breadcrumbs')
     } finally {
@@ -1358,7 +1379,7 @@ function BreadcrumbsSection({
                   ...query,
                   explain_plan: result.plan,
                   explain_error: result.error,
-                  explain_warnings: result.warnings,
+                  explain_warnings: Array.isArray(result.warnings) ? result.warnings : [],
                 }
               : query
           ),
@@ -1366,6 +1387,15 @@ function BreadcrumbsSection({
       })
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to run EXPLAIN')
+    }
+  }
+
+  const handleCopySQL = async (sql: string) => {
+    try {
+      await navigator.clipboard.writeText(sql)
+      toast.success('SQL copied to clipboard')
+    } catch {
+      toast.error('Failed to copy SQL')
     }
   }
 
@@ -1429,20 +1459,32 @@ function BreadcrumbsSection({
           <div className="space-y-3">
             {analysis.queries.slice(0, 8).map((query, index) => (
               <div key={`${query.normalized_sql}-${index}`} className="rounded-md border border-border/50 bg-background/60 p-3">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">{query.query_type}</Badge>
-                  {query.likely_entity && <Badge variant="outline">{query.likely_entity}</Badge>}
-                  <Badge variant="outline">{query.count}x</Badge>
-                  <Badge variant="outline">{formatDuration(query.total_duration_ms)} total</Badge>
-                  <Badge variant="outline">{formatDuration(query.avg_duration_ms)} avg</Badge>
-                  {query.suspected_n_plus_one && (
-                    <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-300">
-                      N+1 candidate
-                    </Badge>
-                  )}
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{query.query_type}</Badge>
+                    {query.likely_entity && <Badge variant="outline">{query.likely_entity}</Badge>}
+                    <Badge variant="outline">{query.count}x</Badge>
+                    <Badge variant="outline">{formatDuration(query.total_duration_ms)} total</Badge>
+                    <Badge variant="outline">{formatDuration(query.avg_duration_ms)} avg</Badge>
+                    {query.suspected_n_plus_one && (
+                      <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-300">
+                        N+1 candidate
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => handleCopySQL(query.sample_sql)}>
+                      <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+                    </Button>
+                    {query.sample_sql.length > SQL_PREVIEW_LIMIT && (
+                      <Button size="sm" variant="outline" onClick={() => setExpandedSQL(query.sample_sql)}>
+                        View full query
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <pre className="overflow-x-auto rounded-md bg-[#0d1117] p-3 text-xs font-mono text-foreground/80">
-                  {query.sample_sql}
+                  {truncateSQLPreview(query.sample_sql)}
                 </pre>
                 {query.query_type === 'select' && isAdmin && project?.analysis_db_enabled && project?.analysis_db_configured && (
                   <div className="mt-2 flex justify-end">
@@ -1471,6 +1513,24 @@ function BreadcrumbsSection({
           </div>
         </div>
       )}
+      <Dialog open={!!expandedSQL} onOpenChange={open => { if (!open) setExpandedSQL(null) }}>
+        <DialogContent className="h-[90vh] max-h-[90vh] w-[96vw] max-w-[1400px]">
+          <DialogTitle>Full SQL Query</DialogTitle>
+          <DialogDescription>
+            Review and copy the full query text.
+          </DialogDescription>
+          <div className="mt-4 flex min-h-0 flex-1 flex-col">
+            <div className="mb-3 flex justify-end">
+              <Button type="button" variant="outline" onClick={() => expandedSQL && handleCopySQL(expandedSQL)}>
+                <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+              </Button>
+            </div>
+            <pre className="min-h-0 flex-1 overflow-auto rounded-md bg-[#0d1117] p-4 text-xs font-mono text-foreground/80">
+              {expandedSQL}
+            </pre>
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="rounded-lg border border-border/60 overflow-hidden bg-[#0d1117]">
         <table className="w-full text-xs font-mono">
           <thead>

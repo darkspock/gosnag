@@ -106,7 +106,7 @@ func (h *Handler) AnalyzeIssueQueries(w http.ResponseWriter, r *http.Request) {
 	if len(items) == 0 {
 		writeJSON(w, http.StatusOK, AnalysisResponse{
 			Summary:  Summary{},
-			Queries:  nil,
+			Queries:  []QueryResult{},
 			Warnings: []string{"No SQL breadcrumbs found in this event."},
 			EventID:  event.EventID,
 		})
@@ -397,8 +397,9 @@ func analyzeQueries(items []extractedQuery) AnalysisResponse {
 	}
 
 	return AnalysisResponse{
-		Summary: summary,
-		Queries: results,
+		Summary:  summary,
+		Queries:  results,
+		Warnings: []string{},
 	}
 }
 
